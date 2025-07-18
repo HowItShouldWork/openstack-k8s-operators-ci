@@ -144,7 +144,7 @@ jobs:
           echo "Organization: ${ORG_NAME}"
           echo "Feature Branch Name: ${BRANCH_NAME}"
           echo "New Version on main: ${NEW_VERSION}"
-          echo "New FORCE_BUMP_BRANCHES: ${FORCE_BUMP_BRANCHES}"
+          echo "New FORCE_BUMP_BRANCHES: ${FORCE_BUMP_BRANCHES}"
           echo "Trigger Branch: ${TRIGGER_BRANCH}"
           echo "Source Branch: ${SOURCE_BRANCH}"
           echo "-------------------------------------------"
