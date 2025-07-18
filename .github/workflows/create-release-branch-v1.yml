@@ -22,57 +22,28 @@ on:
         description: 'The new list of branches for the force-bump-branches.yaml workflow (e.g., ["main", "18.0-fr3"]).'
         required: true
         type: string
-      SOURCE_BRANCH:
-        description: 'The branch to create the new branch from.'
-        required: false
-        type: string
-        default: 'main'
-      TRIGGER_BRANCH:
-        description: 'The branch that must exist in a repo for it to be processed.'
-        required: false
-        type: string
-        default: 'olive'
-      VERSION_VARIABLE:
-        description: 'The name of the version variable in the Makefile.'
-        required: false
-        type: string
-        default: 'VERSION'
-      BRANCH_VARIABLE:
-        description: 'The name of the branch variable in the Makefile.'
-        required: false
-        type: string
-        default: 'BRANCH'
-      OPENSTACK_K8S_TAG_VARIABLE:
-        description: 'The name of the OpenStack K8s tag variable in the Makefile (for install_yamls).'
-        required: false
-        type: string
-        default: 'OPENSTACK_K8S_TAG'
 
 jobs:
-  validate-inputs:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Install yq
-        run: |
-          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
-          sudo chmod +x /usr/bin/yq
-          echo "yq version $(yq --version) installed."
-      
-      - name: Validate Inputs
-        env:
-          FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
-        run: |
-          set -e
-          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e 'tag == "!!seq"' >/dev/null 2>&1; then
-            echo "Error: The 'FORCE_BUMP_BRANCHES' input "${FORCE_BUMP_BRANCHES}" is not a valid YAML array."
-            echo "Please provide it in the format [\"item1\", \"item2\"]."
-            exit 1
-          fi
-          echo "Inputs are valid."
-
   create-branches:
     runs-on: ubuntu-latest
-    needs: validate-inputs
+    env:
+      # Use current org as the ORG_NAME
+      ORG_NAME: ${{ github.repository_owner }}
+      # --- CONFIGURATION FROM INPUTS ---
+      BRANCH_NAME: ${{ inputs.BRANCH_NAME }}
+      NEW_VERSION: ${{ inputs.NEW_VERSION }}
+      FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
+      DRY_RUN: ${{ inputs.DRY_RUN }}
+      # 'The name of the version variable in the Makefile.'
+      VERSION_VARIABLE: 'VERSION'
+      # 'The name of the branch variable in the Makefile.'
+      BRANCH_VARIABLE: 'BRANCH'
+      # 'The name of the OpenStack K8s tag variable in the Makefile (for install_yamls).'
+      OPENSTACK_K8S_TAG_VARIABLE: 'OPENSTACK_K8S_TAG'
+      # 'The branch that must exist in a repo for it to be processed.'
+      TRIGGER_BRANCH: 'olive'
+      # 'The branch to create the new branch from.'
+      SOURCE_BRANCH: 'main'    
     steps:
       - name: Generate a token from the GitHub App
         id: generate_token
@@ -80,6 +51,27 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Install yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+          echo "yq version $(yq --version) installed."
+
+      - name: Validate Inputs
+        run: |
+          set -e
+          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e 'tag == "!!seq"' >/dev/null 2>&1; then
+            echo "Error: The 'FORCE_BUMP_BRANCHES' input "${FORCE_BUMP_BRANCHES}" is not a valid YAML array."
+            echo "Please provide it in the format [\"item1\", \"item2\"]."
+            exit 1
+          fi
+          
+          if [[ -z "$BRANCH_NAME" ]] || [[ -z "$NEW_VERSION" ]]; then
+            echo "Error: Required inputs BRANCH_NAME or NEW_VERSION were not provided."
+            exit 1
+          fi
+          echo "Inputs are valid."          
           
       - name: Checkout code (for the workflow itself)
         uses: actions/checkout@v4
@@ -88,18 +80,6 @@ jobs:
         env:
           # Use the token generated from the GitHub App
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-          # Use current org as the ORG_NAME
-          ORG_NAME: ${{ github.repository_owner }}
-          # --- CONFIGURATION FROM INPUTS ---
-          BRANCH_NAME: ${{ inputs.BRANCH_NAME }}
-          NEW_VERSION: ${{ inputs.NEW_VERSION }}
-          VERSION_VARIABLE: ${{ inputs.VERSION_VARIABLE }}
-          BRANCH_VARIABLE: ${{ inputs.BRANCH_VARIABLE }}
-          FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
-          OPENSTACK_K8S_TAG_VARIABLE: ${{ inputs.OPENSTACK_K8S_TAG_VARIABLE }}
-          TRIGGER_BRANCH: ${{ inputs.TRIGGER_BRANCH }}
-          SOURCE_BRANCH: ${{ inputs.SOURCE_BRANCH }}
-          DRY_RUN: ${{ inputs.DRY_RUN }}
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
 
@@ -130,12 +110,6 @@ jobs:
           }
 
           # --- SCRIPT START ---
-          # Validate that required variables are set
-          if [[ -z "$BRANCH_NAME" ]] || [[ -z "$NEW_VERSION" ]]; then
-            echo "Error: Required inputs BRANCH_NAME or NEW_VERSION were not provided."
-            exit 1
-          fi
-
           if [ "$DRY_RUN" = "true" ]; then
             echo "!!! --- Running in DRY RUN mode. No changes will be pushed. --- !!!"
           fi
@@ -245,33 +219,10 @@ jobs:
             echo "No new branches were created."
           fi
 
-  update-ci-workflows:
-    runs-on: ubuntu-latest
-    needs: create-branches
-    steps:
-      - name: Generate a token from the GitHub App
-        id: generate_token
-        uses: actions/create-github-app-token@v1
-        with:
-          app-id: ${{ secrets.APP_ID }}
-          private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Install yq
-        run: |
-          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
-          sudo chmod +x /usr/bin/yq
-          echo "yq version $(yq --version) installed."
-
       - name: Update openstack-k8s-operators-ci workflows
         env:
           # Use the token generated from the GitHub App
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-          # Use current org as the ORG_NAME
-          ORG_NAME: ${{ github.repository_owner }}
-          # --- CONFIGURATION FROM INPUTS ---
-          BRANCH_NAME: ${{ inputs.BRANCH_NAME }}
-          FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
-          DRY_RUN: ${{ inputs.DRY_RUN }}
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
 
