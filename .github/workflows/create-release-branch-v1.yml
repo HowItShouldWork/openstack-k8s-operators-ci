@@ -84,7 +84,7 @@ jobs:
           SOURCE_BRANCH: ${{ inputs.SOURCE_BRANCH }}
           DRY_RUN: ${{ inputs.DRY_RUN }}
         run: |
-          set -e # Exit immediately if a command exits with a non-zero status.
+          set -ex # Exit immediately if a command exits with a non-zero status.
 
           # --- FUNCTION DEFINITIONS ---
           # A function to handle committing and pushing changes.
@@ -238,7 +238,7 @@ jobs:
           FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
           DRY_RUN: ${{ inputs.DRY_RUN }}
         run: |
-          set -e
+          set -ex
 
           # --- FUNCTION DEFINITIONS ---
           update_workflow_file() {
