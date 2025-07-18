@@ -250,7 +250,7 @@ jobs:
               echo "Workflow file '${file_path}' not found. Skipping."
               return
             fi
-            if yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then
+            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then
               echo "Path '${yq_path}' not found in '${file_path}'. No changes made."
               return
             fi
