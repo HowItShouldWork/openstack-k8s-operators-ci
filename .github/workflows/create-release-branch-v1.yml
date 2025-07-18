@@ -11,13 +11,17 @@ on:
         type: boolean
         default: true
       BRANCH_NAME:
-        description: 'The name of the new feature/release branch to create (e.g., 24.1-fr1).'
+        description: 'The name of the new feature/release branch to create (e.g. 18.0-fr3).'
         required: true
         type: string
       NEW_VERSION:
-        description: 'The new version to set in the Makefile on the main/source branch (e.g., 25.0).'
+        description: 'The new version to set in the Makefile on the main/source branch (e.g. 0.5).'
         required: true
         type: string
+      FORCE_BUMP_BRANCHES:
+        description: 'The new list of branches for the force-bump-branches.yaml workflow (e.g., ["main", "18.0-fr3"]).'
+        required: true
+        type: string       
       SOURCE_BRANCH:
         description: 'The branch to create the new branch from.'
         required: false
@@ -82,8 +86,34 @@ jobs:
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
 
+          # --- FUNCTION DEFINITIONS ---
+          # A function to handle committing and pushing changes.
+          # Arguments: 1: Commit Message, 2: File(s) to add, 3: Branch to push
+          commit_and_push() {
+            local commit_message="$1"
+            local files_to_add="$2"
+            local branch_to_push="$3"
+
+            if ! git diff --quiet -- $files_to_add; then
+              echo "Showing changes for branch '${branch_to_push}':"
+              git diff -- $files_to_add
+              if [ "$DRY_RUN" = "true" ]; then
+                echo "DRY RUN: Commit '${commit_message}' not created for branch '${branch_to_push}'."
+              else
+                git config --global user.name "github-actions[bot]"
+                git config --global user.email "github-actions[bot]@users.noreply.github.com"
+                git add $files_to_add
+                git commit -m "$commit_message"
+                echo "Pushing changes to ${branch_to_push}..."
+                git push origin ${branch_to_push}
+              fi
+            else
+              echo "No changes detected in '${files_to_add}'. Nothing to commit."
+            fi
+          }
+
+          # --- SCRIPT START ---
           # Validate that required variables are set
-          # Note: GitHub UI enforces required inputs, but this is a good safeguard.
           if [[ -z "$BRANCH_NAME" ]] || [[ -z "$NEW_VERSION" ]]; then
             echo "Error: Required inputs BRANCH_NAME or NEW_VERSION were not provided."
             exit 1
@@ -114,12 +144,10 @@ jobs:
           for repo_name in $repos; do
             echo "--- Checking repository: ${repo_name} ---"
 
-            # for now skip rabbitmq-cluster-operator
             if [[ "$repo_name" == "rabbitmq-cluster-operator" ]]; then 
               continue
             fi
 
-            # Check if the trigger branch exists by checking the exit code of the API call.
             if gh api "repos/${ORG_NAME}/${repo_name}/branches/${TRIGGER_BRANCH}" >/dev/null 2>&1; then
               echo "✅ Trigger branch '${TRIGGER_BRANCH}' found in ${repo_name}."
 
@@ -131,103 +159,47 @@ jobs:
 
               if ! git show-ref --verify --quiet "refs/remotes/origin/${SOURCE_BRANCH}"; then
                 echo "⚠️ Source branch '${SOURCE_BRANCH}' does not exist in ${repo_name}. Skipping."
-                cd ..
-                rm -rf "$TEMP_DIR"
+                cd .. && rm -rf "$TEMP_DIR"
                 continue
               fi
 
-              # Skip the entire repository if the new branch already exists.
               if git show-ref --verify --quiet "refs/remotes/origin/${BRANCH_NAME}"; then
                 echo "ℹ️ Branch '${BRANCH_NAME}' already exists in ${repo_name}. Skipping this repository."
-                cd ..
-                rm -rf "$TEMP_DIR"
+                cd .. && rm -rf "$TEMP_DIR"
                 continue
               fi
               
-              # --- LOGIC: CREATE AND UPDATE THE NEW BRANCH ---
               echo "Creating branch '${BRANCH_NAME}' from '${SOURCE_BRANCH}'..."
               git checkout ${SOURCE_BRANCH}
               git checkout -b ${BRANCH_NAME}
 
               if [ -f "Makefile" ]; then
                 echo "Makefile found. Checking for variables to update on new branch..."
-
-                # ALL repos - Update the BRANCH variable
                 if grep -qE "^${BRANCH_VARIABLE}\s*(\?=|=)" Makefile; then
                   sed -i -E "s/^(${BRANCH_VARIABLE}\s*(\?=|=)\s*).*/\1${BRANCH_NAME}/" Makefile
                 fi
-
-                # install_yamls - Update the OPENSTACK_K8S_TAG variable
                 if [[ "$repo_name" == "install_yamls" ]]; then
                   if grep -qE "^${OPENSTACK_K8S_TAG_VARIABLE}\s*(\?=|=)" Makefile; then
                     sed -i -E "s/^((${OPENSTACK_K8S_TAG_VARIABLE})\s*(\?=|=)\s*).*/\1${BRANCH_NAME}-latest/" Makefile
                   fi
                 fi
-                  
-                # Commit the changes only if a modification was made
-                if ! git diff --quiet Makefile; then
-                  echo "Showing changes for new branch '${BRANCH_NAME}':"
-                  git diff                
-                  if [ "$DRY_RUN" = "true" ]; then
-                    echo "DRY RUN: Changes not committed."
-                  else
-                    git config --global user.name "github-actions[bot]"
-                    git config --global user.email "github-actions[bot]@users.noreply.github.com"
-                    git add Makefile
-                    git commit -m "[${BRANCH_NAME}] Update Makefile for ${BRANCH_NAME}"
-                    echo "Commit for version update created."
-                  fi
-                else
-                  echo "No updates in the Makefile. No commit will be created for this branch."
-                fi
+                commit_and_push "[${BRANCH_NAME}] Update Makefile for ${BRANCH_NAME}" "Makefile" "${BRANCH_NAME}"
               else
-                  echo "No Makefile found. No changes will be committed to new branch."
+                echo "No Makefile found. No changes will be committed to new branch."
               fi
 
-              # Push the new branch with the potential new commit
-              if [ "$DRY_RUN" = "true" ]; then
-                echo "DRY RUN: Would push branch '${BRANCH_NAME}'."
-              else
-                git push origin ${BRANCH_NAME}
-                echo "Branch successfully pushed."
-              fi
               created_repos+="- ${repo_name}\n"
 
-              # --- LOGIC: UPDATE SOURCE BRANCH AFTERWARDS ---
               if [[ "$repo_name" == "openstack-operator" ]]; then
-                # Reset any uncommitted changes before switching branch.
-                # In non-dry-run, this does nothing as changes were committed.
-                # In dry-run, this discards the generated diff.
-                git reset --hard              
+                git reset --hard
                 git checkout ${SOURCE_BRANCH}
-                # Ensure we have the latest version of the source branch before making changes
                 git pull origin ${SOURCE_BRANCH}
 
                 if [ -f "Makefile" ]; then
-                  # Construct the full version string by appending ".0"
                   FULL_MAKEFILE_VERSION="${NEW_VERSION}.0"
-
-                  # Conditionally update the main VERSION variable on the source branch
                   if grep -qE "^${VERSION_VARIABLE}\s*(:=|\?=|=)" Makefile; then
                     sed -i -E "s/^(${VERSION_VARIABLE}\s*(:=|\?=|=)).*/\1 ${FULL_MAKEFILE_VERSION}/" Makefile
-
-                    # Commit and push the change to the source branch
-                    if ! git diff --quiet Makefile; then
-                      echo "Showing changes for source branch '${SOURCE_BRANCH}':"
-                      git diff
-                      if [ "$DRY_RUN" = "true" ]; then
-                        echo "DRY RUN: Changes not committed or pushed."
-                      else
-                        git config --global user.name "github-actions[bot]"
-                        git config --global user.email "github-actions[bot]@users.noreply.github.com"
-                        git add Makefile
-                        git commit -m "Bump version to ${NEW_VERSION}"
-                        echo "Pushing version update to ${SOURCE_BRANCH}..."
-                        git push origin ${SOURCE_BRANCH}
-                      fi
-                    else
-                      echo "Version in Makefile already up to date. No changes pushed to ${SOURCE_BRANCH}."
-                    fi                      
+                    commit_and_push "Bump version to ${NEW_VERSION}" "Makefile" "${SOURCE_BRANCH}"
                   else
                     echo "Variable '${VERSION_VARIABLE}' not found. No changes pushed to ${SOURCE_BRANCH}."
                   fi
@@ -236,10 +208,7 @@ jobs:
                 fi
               fi
               
-              # Clean up
-              cd ..
-              rm -rf "$TEMP_DIR"
-
+              cd .. && rm -rf "$TEMP_DIR"
             else
               echo "❌ Trigger branch '${TRIGGER_BRANCH}' not found in ${repo_name}. Skipping."
             fi
@@ -258,81 +227,75 @@ jobs:
             echo "No new branches were created."
           fi
 
-      - name: Update openstack-k8s-operators-ci force-bump-branches.yaml and release-branch-sync.yaml workflows
+      - name: Update openstack-k8s-operators-ci workflows
         env:
           # Use the token generated from the GitHub App
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           # Use current org as the ORG_NAME
           ORG_NAME: ${{ github.repository_owner }}
-          # --- CONFIGURATION FROM INPUTS ---
-          BRANCH_NAME: ${{ inputs.BRANCH_NAME }}        
+          # --- CONFIGURATION FROM INPUTS ---        
+          BRANCH_NAME: ${{ inputs.BRANCH_NAME }}
+          FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
+          DRY_RUN: ${{ inputs.DRY_RUN }}
         run: |
-          set -e # Exit immediately if a command exits with a non-zero status.
+          set -e
 
+          # --- FUNCTION DEFINITIONS ---
+          update_workflow_file() {
+            local file_path="$1"
+            local yq_path="$2"
+            local new_value="$3"
+
+            if [ ! -f "${file_path}" ]; then
+              echo "Workflow file '${file_path}' not found. Skipping."
+              return
+            fi
+            if ! yq -e "has(${yq_path})" "${file_path}" >/dev/null; then
+              echo "Path '${yq_path}' not found in '${file_path}'. No changes made."
+              return
+            fi
+            
+            local current_value
+            current_value=$(yq e "${yq_path}" "${file_path}")
+            if [ "$current_value" != "$new_value" ]; then
+              echo "Path '${yq_path}' found in '${file_path}'. Updating from '${current_value}' to '${new_value}'..."
+              yq -i "${yq_path} = \"${new_value}\"" "${file_path}"
+            else
+              echo "Path '${yq_path}' in '${file_path}' is already set to '${new_value}'. No changes made."
+            fi
+          }
+
+          # --- SCRIPT START ---
+          echo "--- Checking repository: openstack-k8s-operators-ci ---"
           TEMP_DIR=$(mktemp -d)
           echo "Cloning repository into ${TEMP_DIR}..."
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/openstack-k8s-operators-ci.git" "$TEMP_DIR"
-              
           cd "$TEMP_DIR"
 
-          # --- LOGIC: UPDATE openstack-k8s-operators-ci force-bump-branches.yaml and release-branch-sync.yaml workflows ---
-          RELEASE_BRANCH_SYNC_FILE=".github/workflows/release-branch-sync.yaml"
-          if [ ! -f "${RELEASE_BRANCH_SYNC_FILE}" ]; then
-            TARGET_PATH=".on.workflow_call.inputs.source_branch.default"
+          # Update workflows on the main branch
+          git checkout main
+          git pull origin main
 
-            # First, check if the path exists in the YAML file.
-            # The '-e' (exit-status) flag causes yq to exit with a non-zero status
-            # if the expression evaluates to false, null, or empty.
-            if yq -e "has(${TARGET_PATH})" "${RELEASE_BRANCH_SYNC_FILE}" >/dev/null; then
-              # Path exists, get the current value.
-              CURRENT_VALUE=$(yq e "${TARGET_PATH}" "${RELEASE_BRANCH_SYNC_FILE}")
+          update_workflow_file ".github/workflows/release-branch-sync.yaml" ".on.workflow_call.inputs.source_branch.default" "${BRANCH_NAME}"
+          update_workflow_file ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "${FORCE_BUMP_BRANCHES}"
 
-              echo "Path '$TARGET_PATH' found. Updating default from '${CURRENT_VALUE}' to '${BRANCH_NAME}'..."
-
-              # Use yq to update the value in-place since the path is confirmed to exist.
-              # The '-i' flag tells yq to modify the file directly.
-              yq -i "${TARGET_PATH} = \"${BRANCH_NAME}\"" "${RELEASE_BRANCH_SYNC_FILE}"
-            else
-              echo "Path '$TARGET_PATH' not found in '${RELEASE_BRANCH_SYNC_FILE}'. No changes made."
-            fi
-          fi
-
-          FORCE_BUMP_BRANCHES_FILE=".github/workflows/force-bump-branches.yaml"
-          if [ ! -f "${FORCE_BUMP_BRANCHES_FILE}" ]; then
-            TARGET_PATH=".jobs.trigger-jobs.strategy.matrix.branch"
-
-            # First, check if the path exists in the YAML file.
-            # The '-e' (exit-status) flag causes yq to exit with a non-zero status
-            # if the expression evaluates to false, null, or empty.
-            if yq -e "has(${TARGET_PATH})" "${FORCE_BUMP_BRANCHES_FILE}" >/dev/null; then
-              # Path exists, get the current value.
-              CURRENT_VALUE=$(yq e "${TARGET_PATH}" "${FORCE_BUMP_BRANCHES_FILE}")
-
-              echo "Path '$TARGET_PATH' found. Updating default from '${CURRENT_VALUE}' to '${BRANCH_NAME}'..."
-
-              # Use yq to update the value in-place since the path is confirmed to exist.
-              # The '-i' flag tells yq to modify the file directly.
-              yq -i "${TARGET_PATH} = \"${BRANCH_NAME}\"" "${FORCE_BUMP_BRANCHES_FILE}"
-            else
-              echo "Path '$TARGET_PATH' not found in '${FORCE_BUMP_BRANCHES_FILE}'. No changes made."
-            fi
-          fi
-
-          # Commit the changes only if a modification was made
-          if ! git diff --quiet ${RELEASE_BRANCH_SYNC_FILE} ${FORCE_BUMP_BRANCHES_FILE}; then
-            echo "Showing changes for new branch '${BRANCH_NAME}':"
-            git diff                
+          # Commit and push changes if any were made
+          if ! git diff --quiet .github/workflows/; then
+            echo "Showing changes for main branch:"
+            git diff .github/workflows/
             if [ "$DRY_RUN" = "true" ]; then
-              echo "DRY RUN: Changes not committed."
+              echo "DRY RUN: CI workflow changes not committed."
             else
               git config --global user.name "github-actions[bot]"
               git config --global user.email "github-actions[bot]@users.noreply.github.com"
-              git add ${WORKFLOW_FILE}
-              git commit -m "[${BRANCH_NAME}] Update ${WORKFLOW_FILE} for ${BRANCH_NAME}"
-              echo "Commit for version update created."
+              git add .github/workflows/
+              git commit -m "ci: Update workflow defaults for ${BRANCH_NAME}"
+              echo "Pushing CI workflow updates to main branch..."
+              git push origin main
             fi
           else
-            echo "No updates in the ${WORKFLOW_FILE}. No commit will be created for this branch."
+            echo "No updates needed in CI workflows."
           fi
           
-          echo "Workflow finished."      
+          cd .. && rm -rf "$TEMP_DIR"
+          echo "Workflow finished."
