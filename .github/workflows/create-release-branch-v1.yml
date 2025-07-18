@@ -241,8 +241,9 @@ jobs:
           set -ex
 
           # --- FUNCTION DEFINITIONS ---
-          # Updates a simple string value in a YAML file.
-          update_workflow_value() {
+          # Updates a value in a YAML file, automatically detecting the type of the existing node.
+          # Arguments: 1: File Path, 2: YQ Target Path, 3: New Value
+          update_yaml_value() {
             local file_path="$1"
             local yq_path="$2"
             local new_value="$3"
@@ -250,13 +251,18 @@ jobs:
             if [ ! -f "${file_path}" ]; then echo "Workflow file '${file_path}' not found. Skipping."; return; fi
             if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Path '${yq_path}' not found in '${file_path}'."; return; fi
             
-            local current_value
-            current_value=$(yq e "${yq_path}" "${file_path}")
-            if [ "$current_value" != "$new_value" ]; then
-              echo "Path '${yq_path}' found in '${file_path}'. Updating from '${current_value}' to '${new_value}'..."
-              yq -i "${yq_path} = \"${new_value}\"" "${file_path}"
+            # Get the tag of the existing node to determine its type
+            local current_tag
+            current_tag=$(yq e "(${yq_path}) | tag" "${file_path}")
+
+            if [ "$current_tag" = "!!seq" ]; then
+              # It's an array, treat new value as a literal so yq can parse it
+              echo "Path '${yq_path}' is an array. Replacing with new value: ${new_value}"
+              yq -i "${yq_path} = ${new_value}" "${file_path}"
             else
-              echo "Path '${yq_path}' in '${file_path}' is already set to '${new_value}'. No changes made."
+              # It's a scalar (string, int, etc.), treat new value as a string
+              echo "Path '${yq_path}' is a scalar. Updating from '${current_value}' to '${new_value}'..."
+              yq -i "${yq_path} = \"${new_value}\"" "${file_path}"
             fi
           }
 
@@ -271,17 +277,8 @@ jobs:
           git checkout main
           git pull origin main
 
-          update_workflow_value ".github/workflows/release-branch-sync.yaml" ".on.workflow_call.inputs.source_branch.default" "${BRANCH_NAME}"
-          
-          # Replace the array in force-bump-branches.yaml
-          BUMP_FILE=".github/workflows/force-bump-branches.yaml"
-          BUMP_PATH=".jobs.trigger-jobs.strategy.matrix.branch"
-          if [ -f "$BUMP_FILE" ]; then
-            echo "Replacing array at '${BUMP_PATH}' in '${BUMP_FILE}'..."
-            yq -i "${BUMP_PATH} = ${FORCE_BUMP_BRANCHES}" "${BUMP_FILE}"
-          else
-            echo "Workflow file '${BUMP_FILE}' not found. Skipping."
-          fi
+          update_yaml_value ".github/workflows/release-branch-sync.yaml" ".on.workflow_call.inputs.source_branch.default" "${BRANCH_NAME}"
+          update_yaml_value ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "${FORCE_BUMP_BRANCHES}"
 
           # Commit and push changes if any were made
           if ! git diff --quiet .github/workflows/; then
