@@ -64,6 +64,17 @@ jobs:
           sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
           sudo chmod +x /usr/bin/yq
           echo "yq version $(yq --version) installed."
+
+      - name: Validate Inputs
+        run: |
+          set -e
+          FORCE_BUMP_BRANCHES='${{ inputs.FORCE_BUMP_BRANCHES }}'
+          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e 'tag == "!!seq"' >/dev/null 2>&1; then
+            echo "Error: The 'FORCE_BUMP_BRANCHES' input is not a valid YAML array."
+            echo "Please provide it in the format '[\"item1\", \"item2\"]'."
+            exit 1
+          fi
+          echo "Inputs are valid."
           
       - name: Checkout code (for the workflow itself)
         uses: actions/checkout@v4
@@ -79,6 +90,7 @@ jobs:
           NEW_VERSION: ${{ inputs.NEW_VERSION }}
           VERSION_VARIABLE: ${{ inputs.VERSION_VARIABLE }}
           BRANCH_VARIABLE: ${{ inputs.BRANCH_VARIABLE }}
+          FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
           OPENSTACK_K8S_TAG_VARIABLE: ${{ inputs.OPENSTACK_K8S_TAG_VARIABLE }}
           TRIGGER_BRANCH: ${{ inputs.TRIGGER_BRANCH }}
           SOURCE_BRANCH: ${{ inputs.SOURCE_BRANCH }}
@@ -127,6 +139,7 @@ jobs:
           echo "Organization: ${ORG_NAME}"
           echo "Feature Branch Name: ${BRANCH_NAME}"
           echo "New Version on main: ${NEW_VERSION}"
+          echo "New FORCE_BUMP_BRANCHES"
           echo "Trigger Branch: ${TRIGGER_BRANCH}"
           echo "Source Branch: ${SOURCE_BRANCH}"
           echo "-------------------------------------------"
@@ -142,7 +155,7 @@ jobs:
           created_repos=""
 
           for repo_name in $repos; do
-            echo "--- Checking repository: ${repo_name} ---"
+            echo "--- Checking REPOSITORY: ${repo_name} ---"
 
             if [[ "$repo_name" == "rabbitmq-cluster-operator" ]]; then 
               continue
@@ -238,7 +251,7 @@ jobs:
           FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
           DRY_RUN: ${{ inputs.DRY_RUN }}
         run: |
-          set -ex
+          set -e # Exit immediately if a command exits with a non-zero status.
 
           # --- FUNCTION DEFINITIONS ---
           # Updates a value in a YAML file, automatically detecting the type of the existing node.
@@ -261,26 +274,13 @@ jobs:
               yq -i "${yq_path} = ${new_value}" "${file_path}"
             else
               # It's a scalar (string, int, etc.), treat new value as a string
-              local current_value
-              current_value=$(yq e "${yq_path}" "${file_path}")
-              if [ "$current_value" = "$new_value" ]; then
-                  echo "Path '${yq_path}' is already set to '${new_value}'. No changes made."
-                  return
-              fi
               echo "Path '${yq_path}' is a scalar. Updating from '${current_value}' to '${new_value}'..."
               yq -i "${yq_path} = \"${new_value}\"" "${file_path}"
             fi
           }
 
           # --- SCRIPT START ---
-          # Validate that the FORCE_BUMP_BRANCHES input is a valid YAML array
-          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e 'tag == "!!seq"' >/dev/null 2>&1; then
-            echo "Error: The 'FORCE_BUMP_BRANCHES' input is not a valid YAML array."
-            echo "Please provide it in the format '[\"item1\", \"item2\"]'."
-            exit 1
-          fi
-
-          echo "--- Checking repository: openstack-k8s-operators-ci ---"
+          echo "--- Checking REPOSITORY: openstack-k8s-operators-ci ---"
           TEMP_DIR=$(mktemp -d)
           echo "Cloning repository into ${TEMP_DIR}..."
           git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/openstack-k8s-operators-ci.git" "$TEMP_DIR"
