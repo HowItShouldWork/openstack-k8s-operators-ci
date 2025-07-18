@@ -11,13 +11,17 @@ on:
         type: boolean
         default: true
       BRANCH_NAME:
-        description: 'The name of the new feature/release branch to create (e.g., 24.1-fr1).'
+        description: 'The name of the new feature/release branch to create (e.g. 18.0-fr3).'
         required: true
         type: string
       NEW_VERSION:
-        description: 'The new version to set in the Makefile on the main/source branch (e.g., 25.0).'
+        description: 'The new version to set in the Makefile on the main/source branch (e.g. 0.5).'
         required: true
         type: string
+      FORCE_BUMP_BRANCHES:
+        description: 'The new list of branches for the force-bump-branches.yaml workflow (e.g., ["main", "18.0-fr3"]).'
+        required: true
+        type: string          
       SOURCE_BRANCH:
         description: 'The branch to create the new branch from.'
         required: false
@@ -225,12 +229,16 @@ jobs:
 
       - name: Update openstack-k8s-operators-ci workflows
         env:
+          # Use the token generated from the GitHub App
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          # Use current org as the ORG_NAME
           ORG_NAME: ${{ github.repository_owner }}
+          # --- CONFIGURATION FROM INPUTS ---        
           BRANCH_NAME: ${{ inputs.BRANCH_NAME }}
+          FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
           DRY_RUN: ${{ inputs.DRY_RUN }}
         run: |
-          set -e
+          set -ex
 
           # --- FUNCTION DEFINITIONS ---
           # Updates a simple string value in a YAML file.
@@ -284,7 +292,7 @@ jobs:
           git pull origin main
 
           update_workflow_value ".github/workflows/release-branch-sync.yaml" ".on.workflow_call.inputs.source_branch.default" "${BRANCH_NAME}"
-          replace_yaml_array ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "main" "${BRANCH_NAME}"
+          replace_yaml_array ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "main" "${FORCE_BUMP_BRANCHES}"
 
           # Commit and push changes if any were made
           if ! git diff --quiet .github/workflows/; then
