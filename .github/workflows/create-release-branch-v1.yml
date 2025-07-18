@@ -70,7 +70,7 @@ jobs:
           set -e
           FORCE_BUMP_BRANCHES='${{ inputs.FORCE_BUMP_BRANCHES }}'
           if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e 'tag == "!!seq"' >/dev/null 2>&1; then
-            echo "Error: The 'FORCE_BUMP_BRANCHES' input is not a valid YAML array."
+            echo "Error: The 'FORCE_BUMP_BRANCHES' input "${FORCE_BUMP_BRANCHES}" is not a valid YAML array."
             echo "Please provide it in the format '[\"item1\", \"item2\"]'."
             exit 1
           fi
