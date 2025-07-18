@@ -150,6 +150,11 @@ jobs:
               
               cd "$TEMP_DIR"
 
+              # --- TEMPORARY DEBUG STEP ---
+              echo "--- DEBUGGING PERMISSIONS for ${repo_name} ---"
+              gh api "repos/${ORG_NAME}/${repo_name}" --jq .permissions
+              echo "---------------------------------------------"
+
               if ! git show-ref --verify --quiet "refs/remotes/origin/${SOURCE_BRANCH}"; then
                 echo "⚠️ Source branch '${SOURCE_BRANCH}' does not exist in ${repo_name}. Skipping."
                 cd .. && rm -rf "$TEMP_DIR"
