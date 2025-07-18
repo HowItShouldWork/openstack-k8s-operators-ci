@@ -79,7 +79,8 @@ jobs:
       - name: Create Branches and Update Version
         env:
           # Use the token generated from the GitHub App
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          # GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GH_TOKEN: ${{ secrets.ORG_ADMIN_PAT }}
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
 
@@ -222,7 +223,8 @@ jobs:
       - name: Update openstack-k8s-operators-ci workflows
         env:
           # Use the token generated from the GitHub App
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          # GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GH_TOKEN: ${{ secrets.ORG_ADMIN_PAT }}
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
 
