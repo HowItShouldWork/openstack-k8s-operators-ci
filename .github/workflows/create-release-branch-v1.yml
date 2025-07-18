@@ -11,17 +11,13 @@ on:
         type: boolean
         default: true
       BRANCH_NAME:
-        description: 'The name of the new feature/release branch to create (e.g. 18.0-fr3).'
+        description: 'The name of the new feature/release branch to create (e.g., 24.1-fr1).'
         required: true
         type: string
       NEW_VERSION:
-        description: 'The new version to set in the Makefile on the main/source branch (e.g. 0.5).'
+        description: 'The new version to set in the Makefile on the main/source branch (e.g., 25.0).'
         required: true
         type: string
-      FORCE_BUMP_BRANCHES:
-        description: 'The new list of branches for the force-bump-branches.yaml workflow (e.g., ["main", "18.0-fr3"]).'
-        required: true
-        type: string       
       SOURCE_BRANCH:
         description: 'The branch to create the new branch from.'
         required: false
@@ -84,7 +80,7 @@ jobs:
           SOURCE_BRANCH: ${{ inputs.SOURCE_BRANCH }}
           DRY_RUN: ${{ inputs.DRY_RUN }}
         run: |
-          set -ex # Exit immediately if a command exits with a non-zero status.
+          set -e # Exit immediately if a command exits with a non-zero status.
 
           # --- FUNCTION DEFINITIONS ---
           # A function to handle committing and pushing changes.
@@ -229,31 +225,22 @@ jobs:
 
       - name: Update openstack-k8s-operators-ci workflows
         env:
-          # Use the token generated from the GitHub App
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-          # Use current org as the ORG_NAME
           ORG_NAME: ${{ github.repository_owner }}
-          # --- CONFIGURATION FROM INPUTS ---        
           BRANCH_NAME: ${{ inputs.BRANCH_NAME }}
-          FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
           DRY_RUN: ${{ inputs.DRY_RUN }}
         run: |
-          set -ex
+          set -e
 
           # --- FUNCTION DEFINITIONS ---
-          update_workflow_file() {
+          # Updates a simple string value in a YAML file.
+          update_workflow_value() {
             local file_path="$1"
             local yq_path="$2"
             local new_value="$3"
 
-            if [ ! -f "${file_path}" ]; then
-              echo "Workflow file '${file_path}' not found. Skipping."
-              return
-            fi
-            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then
-              echo "Path '${yq_path}' not found in '${file_path}'. No changes made."
-              return
-            fi
+            if [ ! -f "${file_path}" ]; then echo "Workflow file '${file_path}' not found. Skipping."; return; fi
+            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Path '${yq_path}' not found in '${file_path}'."; return; fi
             
             local current_value
             current_value=$(yq e "${yq_path}" "${file_path}")
@@ -263,6 +250,26 @@ jobs:
             else
               echo "Path '${yq_path}' in '${file_path}' is already set to '${new_value}'. No changes made."
             fi
+          }
+
+          # Replaces a YAML array with a new one.
+          replace_yaml_array() {
+            local file_path="$1"
+            local yq_path="$2"
+            # The rest of the arguments are the new array elements
+            shift 2
+            local -a new_array=("$@")
+
+            if [ ! -f "${file_path}" ]; then echo "Workflow file '${file_path}' not found. Skipping."; return; fi
+            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Path '${yq_path}' not found in '${file_path}'."; return; fi
+            
+            echo "Path '${yq_path}' found in '${file_path}'. Replacing array..."
+            # Create the yq expression to build the array
+            local yq_expression="${yq_path} = []"
+            for item in "${new_array[@]}"; do
+                yq_expression="${yq_expression} | ${yq_path} += \"${item}\""
+            done
+            yq -i "${yq_expression}" "${file_path}"
           }
 
           # --- SCRIPT START ---
@@ -276,8 +283,8 @@ jobs:
           git checkout main
           git pull origin main
 
-          update_workflow_file ".github/workflows/release-branch-sync.yaml" ".on.workflow_call.inputs.source_branch.default" "${BRANCH_NAME}"
-          update_workflow_file ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "${FORCE_BUMP_BRANCHES}"
+          update_workflow_value ".github/workflows/release-branch-sync.yaml" ".on.workflow_call.inputs.source_branch.default" "${BRANCH_NAME}"
+          replace_yaml_array ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "main" "${BRANCH_NAME}"
 
           # Commit and push changes if any were made
           if ! git diff --quiet .github/workflows/; then
