@@ -49,8 +49,30 @@ on:
         default: 'OPENSTACK_K8S_TAG'
 
 jobs:
+  validate-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+          echo "yq version $(yq --version) installed."
+      
+      - name: Validate Inputs
+        env:
+          FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
+        run: |
+          set -e
+          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e 'tag == "!!seq"' >/dev/null 2>&1; then
+            echo "Error: The 'FORCE_BUMP_BRANCHES' input is not a valid YAML array."
+            echo "Please provide it in the format '[\"item1\", \"item2\"]'."
+            exit 1
+          fi
+          echo "Inputs are valid."
+
   create-branches:
     runs-on: ubuntu-latest
+    needs: validate-inputs
     steps:
       - name: Generate a token from the GitHub App
         id: generate_token
@@ -58,25 +80,7 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-
-      - name: Install yq
-        run: |
-          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
-          sudo chmod +x /usr/bin/yq
-          echo "yq version $(yq --version) installed."
-
-      - name: Validate Inputs
-        env:
-          FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
-        run: |
-          set -e
-          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e 'tag == "!!seq"' >/dev/null 2>&1; then
-            echo "Error: The 'FORCE_BUMP_BRANCHES' input "${FORCE_BUMP_BRANCHES}" is not a valid YAML array."
-            echo "Please provide it in the format [\"item1\", \"item2\"]."
-            exit 1
-          fi
-          echo "Inputs are valid."
-
+          
       - name: Checkout code (for the workflow itself)
         uses: actions/checkout@v4
 
@@ -140,7 +144,7 @@ jobs:
           echo "Organization: ${ORG_NAME}"
           echo "Feature Branch Name: ${BRANCH_NAME}"
           echo "New Version on main: ${NEW_VERSION}"
-          echo "New FORCE_BUMP_BRANCHES"
+          echo "New FORCE_BUMP_BRANCHES: ${FORCE_BUMP_BRANCHES}"
           echo "Trigger Branch: ${TRIGGER_BRANCH}"
           echo "Source Branch: ${SOURCE_BRANCH}"
           echo "-------------------------------------------"
@@ -240,6 +244,23 @@ jobs:
           else
             echo "No new branches were created."
           fi
+
+  update-ci-workflows:
+    runs-on: ubuntu-latest
+    needs: create-branches
+    steps:
+      - name: Generate a token from the GitHub App
+        id: generate_token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+
+      - name: Install yq
+        run: |
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq
+          sudo chmod +x /usr/bin/yq
+          echo "yq version $(yq --version) installed."
 
       - name: Update openstack-k8s-operators-ci workflows
         env:
