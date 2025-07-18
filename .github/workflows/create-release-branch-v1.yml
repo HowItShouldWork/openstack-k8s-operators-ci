@@ -261,15 +261,21 @@ jobs:
               yq -i "${yq_path} = ${new_value}" "${file_path}"
             else
               # It's a scalar (string, int, etc.), treat new value as a string
+              local current_value
+              current_value=$(yq e "${yq_path}" "${file_path}")
+              if [ "$current_value" = "$new_value" ]; then
+                  echo "Path '${yq_path}' is already set to '${new_value}'. No changes made."
+                  return
+              fi
               echo "Path '${yq_path}' is a scalar. Updating from '${current_value}' to '${new_value}'..."
               yq -i "${yq_path} = \"${new_value}\"" "${file_path}"
             fi
           }
 
           # --- SCRIPT START ---
-          # Validate that the FORCE_BUMP_BRANCHES input is a valid YAML/JSON array
-          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e . >/dev/null 2>&1; then
-            echo "Error: The 'FORCE_BUMP_BRANCHES' input is not a valid YAML/JSON array."
+          # Validate that the FORCE_BUMP_BRANCHES input is a valid YAML array
+          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e 'tag == "!!seq"' >/dev/null 2>&1; then
+            echo "Error: The 'FORCE_BUMP_BRANCHES' input is not a valid YAML array."
             echo "Please provide it in the format '[\"item1\", \"item2\"]'."
             exit 1
           fi
