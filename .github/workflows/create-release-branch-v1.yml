@@ -267,6 +267,13 @@ jobs:
           }
 
           # --- SCRIPT START ---
+          # Validate that the FORCE_BUMP_BRANCHES input is a valid YAML/JSON array
+          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e . >/dev/null 2>&1; then
+            echo "Error: The 'FORCE_BUMP_BRANCHES' input is not a valid YAML/JSON array."
+            echo "Please provide it in the format '[\"item1\", \"item2\"]'."
+            exit 1
+          fi
+
           echo "--- Checking repository: openstack-k8s-operators-ci ---"
           TEMP_DIR=$(mktemp -d)
           echo "Cloning repository into ${TEMP_DIR}..."
