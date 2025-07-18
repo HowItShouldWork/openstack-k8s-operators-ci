@@ -21,7 +21,7 @@ on:
       FORCE_BUMP_BRANCHES:
         description: 'The new list of branches for the force-bump-branches.yaml workflow (e.g., ["main", "18.0-fr3"]).'
         required: true
-        type: string          
+        type: string
       SOURCE_BRANCH:
         description: 'The branch to create the new branch from.'
         required: false
@@ -233,7 +233,7 @@ jobs:
           GH_TOKEN: ${{ steps.generate_token.outputs.token }}
           # Use current org as the ORG_NAME
           ORG_NAME: ${{ github.repository_owner }}
-          # --- CONFIGURATION FROM INPUTS ---        
+          # --- CONFIGURATION FROM INPUTS ---
           BRANCH_NAME: ${{ inputs.BRANCH_NAME }}
           FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
           DRY_RUN: ${{ inputs.DRY_RUN }}
@@ -260,26 +260,6 @@ jobs:
             fi
           }
 
-          # Replaces a YAML array with a new one.
-          replace_yaml_array() {
-            local file_path="$1"
-            local yq_path="$2"
-            # The rest of the arguments are the new array elements
-            shift 2
-            local -a new_array=("$@")
-
-            if [ ! -f "${file_path}" ]; then echo "Workflow file '${file_path}' not found. Skipping."; return; fi
-            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Path '${yq_path}' not found in '${file_path}'."; return; fi
-            
-            echo "Path '${yq_path}' found in '${file_path}'. Replacing array..."
-            # Create the yq expression to build the array
-            local yq_expression="${yq_path} = []"
-            for item in "${new_array[@]}"; do
-                yq_expression="${yq_expression} | ${yq_path} += \"${item}\""
-            done
-            yq -i "${yq_expression}" "${file_path}"
-          }
-
           # --- SCRIPT START ---
           echo "--- Checking repository: openstack-k8s-operators-ci ---"
           TEMP_DIR=$(mktemp -d)
@@ -292,7 +272,16 @@ jobs:
           git pull origin main
 
           update_workflow_value ".github/workflows/release-branch-sync.yaml" ".on.workflow_call.inputs.source_branch.default" "${BRANCH_NAME}"
-          replace_yaml_array ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "main" "${FORCE_BUMP_BRANCHES}"
+          
+          # Replace the array in force-bump-branches.yaml
+          BUMP_FILE=".github/workflows/force-bump-branches.yaml"
+          BUMP_PATH=".jobs.trigger-jobs.strategy.matrix.branch"
+          if [ -f "$BUMP_FILE" ]; then
+            echo "Replacing array at '${BUMP_PATH}' in '${BUMP_FILE}'..."
+            yq -i "${BUMP_PATH} = ${FORCE_BUMP_BRANCHES}" "${BUMP_FILE}"
+          else
+            echo "Workflow file '${BUMP_FILE}' not found. Skipping."
+          fi
 
           # Commit and push changes if any were made
           if ! git diff --quiet .github/workflows/; then
