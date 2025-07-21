@@ -155,8 +155,8 @@ jobs:
               continue
             fi
 
-            echo ${{ steps.app-token.outputs.token }} | gh auth login --with-token
-            gh auth setup-git
+            #echo ${{ steps.app-token.outputs.token }} | gh auth login --with-token
+            #gh auth setup-git
 
             # --- TEMPORARY DEBUG STEP ---
             echo "--- DEBUGGING PERMISSIONS for ${repo_name} ---"
