@@ -151,7 +151,7 @@ jobs:
           }          
           EOF
 
-      - name: Create Branches and Update Version
+      - name: Create release branches and update the release branch
         env:
           # Use the token generated from the GitHub App
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
