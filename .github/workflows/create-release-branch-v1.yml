@@ -51,7 +51,8 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          #owner: ${{ github.repository_owner }}
+          # request an app token for the org instead of just the repo
+          owner: ${{ ORG_NAME }}
 
       - name: Get GitHub App User ID
         id: get-user-id
