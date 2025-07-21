@@ -132,8 +132,8 @@ jobs:
             local yq_path="$2"
             local new_value="$3"
 
-            if [ ! -f "${file_path}" ]; then echo "Workflow file '${file_path}' not found. Skipping."; return; fi
-            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Path '${yq_path}' not found in '${file_path}'."; return; fi
+            if [ ! -f "${file_path}" ]; then echo "Error: File '${file_path}' not found. Skipping."; return; fi
+            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Error: Path '${yq_path}' not found in '${file_path}'."; return; fi
             
             # Get the tag of the existing node to determine its type
             local current_tag
@@ -148,7 +148,21 @@ jobs:
               echo "Path '${yq_path}' is a scalar. Updating from '${current_value}' to '${new_value}'..."
               yq -i "${yq_path} = \"${new_value}\"" "${file_path}"
             fi
-          }          
+          } 
+
+          # Reads a value from a YAML file using a yq path.
+          # Arguments: 1: File Path, 2: YQ Target Path
+          get_yaml_value() {
+            local file_path="$1"
+            local yq_path="$2"
+
+            # Check if the file exists
+            if [ ! -f "${file_path}" ]; then echo "Error: File '${file_path}' not found. Skipping." >&2; return 1; fi
+            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Error: Path '${yq_path}' not found in '${file_path}'."; return; fi
+
+            # If checks pass, get and echo the value
+            yq e "${yq_path}" "${file_path}"
+          }
           EOF
 
       - name: Create release branches and update the release branch
@@ -268,18 +282,43 @@ jobs:
           # Update workflows on the main branch
           git checkout main
           git pull origin main
-          
+
+          # changes to the Makefile
           if [ -f "Makefile" ]; then
             FULL_MAKEFILE_VERSION="${NEW_VERSION}.0"
             if grep -qE "^${VERSION_VARIABLE}\s*(:=|\?=|=)" Makefile; then
               sed -i -E "s/^(${VERSION_VARIABLE}\s*(:=|\?=|=)).*/\1 ${FULL_MAKEFILE_VERSION}/" Makefile
-              commit_and_push "Bump version to ${NEW_VERSION}" "Makefile" "${SOURCE_BRANCH}"
+              commit_and_push "Bump version to ${FULL_MAKEFILE_VERSION}" "Makefile" "${SOURCE_BRANCH}"
             else
               echo "Variable '${VERSION_VARIABLE}' not found. No changes pushed to ${SOURCE_BRANCH}."
             fi
           else
             echo "No Makefile found. No changes pushed to ${SOURCE_BRANCH}."
           fi
+
+          # changes to .github/workflows/catalog-openstack-operator-upgrades.yaml
+          WORKFLOW_FILE=".github/workflows/catalog-openstack-operator-upgrades.yaml"
+          if [ -f "${WORKFLOW_FILE}" ]; then
+            # 1. Find the index of the step to update
+            index=$(yq '.services | to_entries | .[] | select(.value.name == "Create the catalog index") | .key' ${WORKFLOW_FILE})
+            
+            # 2. Check if an index was found
+            if [ -z "$index" ]; then
+              echo "Step 'Create the catalog index' not found."
+              exit 1
+            fi
+
+            echo "Found 'Create the catalog index' step at index: $index"
+            CURRENT_VERSION=get_yaml_value "${WORKFLOW_FILE}" ".steps[$index].env.MAIN_VERSION"
+            FULL_NEW_VERSION="${NEW_VERSION}.0"
+            # 3. Use the index to update the 'image' field in place (-i)
+            update_yaml_value "${WORKFLOW_FILE}" ".steps[$index].env.MAIN_VERSION" "${FULL_NEW_VERSION}"
+            update_yaml_value "${WORKFLOW_FILE}" ".steps[$index].env.FEATURE_RELEASE_VERSION" "${CURRENT_VERSION}"
+            update_yaml_value "${WORKFLOW_FILE}" ".steps[$index].env.FEATURE_RELEASE_BRANCH" "${CURRENT_VERSION}"
+            commit_and_push "Bump version in ${WORKFLOW_FILE} to ${FULL_NEW_VERSION}" "${WORKFLOW_FILE}" "${SOURCE_BRANCH}"
+          else
+            echo "No ${WORKFLOW_FILE} found. No changes pushed to ${SOURCE_BRANCH}."
+          fi            
 
           cd .. && rm -rf "$TEMP_DIR"          
 
