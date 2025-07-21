@@ -47,7 +47,7 @@ jobs:
     steps:
       - name: Generate a token from the GitHub App
         uses: actions/create-github-app-token@v2
-        id: generate_token
+        id: app-token
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -83,7 +83,7 @@ jobs:
       - name: Create Branches and Update Version
         env:
           # Use the token generated from the GitHub App
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           # GH_TOKEN: ${{ secrets.ORG_ADMIN_PAT }}
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
