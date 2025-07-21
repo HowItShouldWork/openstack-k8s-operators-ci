@@ -18,7 +18,7 @@ on:
         required: true
         type: string    
       DRY_RUN:
-        description: 'Dry Run! Run without pushing any changes. Set to false to apply changes.'
+        description: 'Test Run! Run without pushing any changes. Disable to apply changes.'
         required: true
         type: boolean
         default: true
