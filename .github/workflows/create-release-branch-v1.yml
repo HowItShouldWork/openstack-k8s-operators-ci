@@ -157,7 +157,7 @@ jobs:
             local yq_path="$2"
 
             # Check if the file exists
-            if [ ! -f "${file_path}" ]; then echo "Error: File '${file_path}' not found. Skipping." >&2; return 1; fi
+            if [ ! -f "${file_path}" ]; then echo "Error: File '${file_path}' not found. Skipping." >&2; return; fi
             if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Error: Path '${yq_path}' not found in '${file_path}'."; return; fi
 
             # If checks pass, get and echo the value
@@ -309,7 +309,7 @@ jobs:
             fi
 
             echo "Found 'Create the catalog index' step at index: $index"
-            CURRENT_VERSION=get_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.MAIN_VERSION"
+            CURRENT_VERSION=$(get_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.MAIN_VERSION")
             FULL_NEW_VERSION="${NEW_VERSION}.0"
             # 3. Use the index to update the 'image' field in place (-i)
             update_yaml_value "${WORKFLOW_FILE}" ".jobs.build-catalog.steps[$index].env.MAIN_VERSION" "${FULL_NEW_VERSION}"
