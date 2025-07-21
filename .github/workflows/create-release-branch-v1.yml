@@ -262,7 +262,7 @@ jobs:
           echo "--- Checking REPOSITORY: openstack-k8s-operators-ci ---"
           TEMP_DIR=$(mktemp -d)
           echo "Cloning repository into ${TEMP_DIR}..."
-          git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/openstack-k8s-operators-ci.git" "$TEMP_DIR"
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/openstack-operator.git" "$TEMP_DIR"
           cd "$TEMP_DIR"
 
           # Update workflows on the main branch
