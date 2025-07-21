@@ -88,15 +88,18 @@ jobs:
           # Make sure the value of GITHUB_TOKEN will not be persisted in repo's config
           #persist-credentials: false        
 
-      - name: Create Branches and Update Version
-        env:
-          # Use the token generated from the GitHub App
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-          # GH_TOKEN: ${{ secrets.ORG_ADMIN_PAT }}
+      # ----------------------------------------------------------------
+      # Step 1: Create the function library file
+      # ----------------------------------------------------------------
+      - name: Create Function Library
         run: |
-          set -ex # Exit immediately if a command exits with a non-zero status.
+          set -e
 
-          # --- FUNCTION DEFINITIONS ---
+          # Use a heredoc to write a multi-line script file.
+          # This file will contain all your reusable functions.
+          cat <<'EOF' > workflow_functions.sh
+          #!/bin/bash
+
           # A function to handle committing and pushing changes.
           # Arguments: 1: Commit Message, 2: File(s) to add, 3: Branch to push
           commit_and_push() {
@@ -122,7 +125,41 @@ jobs:
             fi
           }
 
-          # --- SCRIPT START ---
+          # Updates a value in a YAML file, automatically detecting the type of the existing node.
+          # Arguments: 1: File Path, 2: YQ Target Path, 3: New Value
+          update_yaml_value() {
+            local file_path="$1"
+            local yq_path="$2"
+            local new_value="$3"
+
+            if [ ! -f "${file_path}" ]; then echo "Workflow file '${file_path}' not found. Skipping."; return; fi
+            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Path '${yq_path}' not found in '${file_path}'."; return; fi
+            
+            # Get the tag of the existing node to determine its type
+            local current_tag
+            current_tag=$(yq e "(${yq_path}) | tag" "${file_path}")
+
+            if [ "$current_tag" = "!!seq" ]; then
+              # It's an array, treat new value as a literal so yq can parse it
+              echo "Path '${yq_path}' is an array. Replacing with new value: ${new_value}"
+              yq -i "${yq_path} = ${new_value}" "${file_path}"
+            else
+              # It's a scalar (string, int, etc.), treat new value as a string
+              echo "Path '${yq_path}' is a scalar. Updating from '${current_value}' to '${new_value}'..."
+              yq -i "${yq_path} = \"${new_value}\"" "${file_path}"
+            fi
+          }          
+          EOF
+
+      - name: Create Branches and Update Version
+        env:
+          # Use the token generated from the GitHub App
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # GH_TOKEN: ${{ secrets.ORG_ADMIN_PAT }}
+        run: |
+          set -ex # Exit immediately if a command exits with a non-zero status.
+          source ./workflow_functions.sh
+          
           if [ "$DRY_RUN" = "true" ]; then
             echo "!!! --- Running in DRY RUN mode. No changes will be pushed. --- !!!"
           fi
@@ -195,24 +232,6 @@ jobs:
 
               created_repos+="- ${repo_name}\n"
 
-              if [[ "$repo_name" == "openstack-operator" ]]; then
-                git reset --hard
-                git checkout ${SOURCE_BRANCH}
-                git pull origin ${SOURCE_BRANCH}
-
-                if [ -f "Makefile" ]; then
-                  FULL_MAKEFILE_VERSION="${NEW_VERSION}.0"
-                  if grep -qE "^${VERSION_VARIABLE}\s*(:=|\?=|=)" Makefile; then
-                    sed -i -E "s/^(${VERSION_VARIABLE}\s*(:=|\?=|=)).*/\1 ${FULL_MAKEFILE_VERSION}/" Makefile
-                    commit_and_push "Bump version to ${NEW_VERSION}" "Makefile" "${SOURCE_BRANCH}"
-                  else
-                    echo "Variable '${VERSION_VARIABLE}' not found. No changes pushed to ${SOURCE_BRANCH}."
-                  fi
-                else
-                  echo "No Makefile found. No changes pushed to ${SOURCE_BRANCH}."
-                fi
-              fi
-              
               cd .. && rm -rf "$TEMP_DIR"
             else
               echo "❌ Trigger branch '${TRIGGER_BRANCH}' not found in ${repo_name}. Skipping."
@@ -232,40 +251,46 @@ jobs:
             echo "No new branches were created."
           fi
 
+      - name: Update openstack-operator main branch
+        env:
+          # Use the token generated from the GitHub App
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          set -e # Exit immediately if a command exits with a non-zero status.
+          source ./workflow_functions.sh
+          
+          echo "--- Checking REPOSITORY: openstack-k8s-operators-ci ---"
+          TEMP_DIR=$(mktemp -d)
+          echo "Cloning repository into ${TEMP_DIR}..."
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/openstack-k8s-operators-ci.git" "$TEMP_DIR"
+          cd "$TEMP_DIR"
+
+          # Update workflows on the main branch
+          git checkout main
+          git pull origin main
+          
+          if [ -f "Makefile" ]; then
+            FULL_MAKEFILE_VERSION="${NEW_VERSION}.0"
+            if grep -qE "^${VERSION_VARIABLE}\s*(:=|\?=|=)" Makefile; then
+              sed -i -E "s/^(${VERSION_VARIABLE}\s*(:=|\?=|=)).*/\1 ${FULL_MAKEFILE_VERSION}/" Makefile
+              commit_and_push "Bump version to ${NEW_VERSION}" "Makefile" "${SOURCE_BRANCH}"
+            else
+              echo "Variable '${VERSION_VARIABLE}' not found. No changes pushed to ${SOURCE_BRANCH}."
+            fi
+          else
+            echo "No Makefile found. No changes pushed to ${SOURCE_BRANCH}."
+          fi
+
+          cd .. && rm -rf "$TEMP_DIR"          
+
       - name: Update openstack-k8s-operators-ci workflows
         env:
           # Use the token generated from the GitHub App
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
+          source ./workflow_functions.sh
 
-          # --- FUNCTION DEFINITIONS ---
-          # Updates a value in a YAML file, automatically detecting the type of the existing node.
-          # Arguments: 1: File Path, 2: YQ Target Path, 3: New Value
-          update_yaml_value() {
-            local file_path="$1"
-            local yq_path="$2"
-            local new_value="$3"
-
-            if [ ! -f "${file_path}" ]; then echo "Workflow file '${file_path}' not found. Skipping."; return; fi
-            if ! yq -e "(${yq_path}) != null" "${file_path}" >/dev/null; then echo "Path '${yq_path}' not found in '${file_path}'."; return; fi
-            
-            # Get the tag of the existing node to determine its type
-            local current_tag
-            current_tag=$(yq e "(${yq_path}) | tag" "${file_path}")
-
-            if [ "$current_tag" = "!!seq" ]; then
-              # It's an array, treat new value as a literal so yq can parse it
-              echo "Path '${yq_path}' is an array. Replacing with new value: ${new_value}"
-              yq -i "${yq_path} = ${new_value}" "${file_path}"
-            else
-              # It's a scalar (string, int, etc.), treat new value as a string
-              echo "Path '${yq_path}' is a scalar. Updating from '${current_value}' to '${new_value}'..."
-              yq -i "${yq_path} = \"${new_value}\"" "${file_path}"
-            fi
-          }
-
-          # --- SCRIPT START ---
           echo "--- Checking REPOSITORY: openstack-k8s-operators-ci ---"
           TEMP_DIR=$(mktemp -d)
           echo "Cloning repository into ${TEMP_DIR}..."
@@ -280,22 +305,7 @@ jobs:
           update_yaml_value ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "${FORCE_BUMP_BRANCHES}"
 
           # Commit and push changes if any were made
-          if ! git diff --quiet .github/workflows/; then
-            echo "Showing changes for main branch:"
-            git diff .github/workflows/
-            if [ "$DRY_RUN" = "true" ]; then
-              echo "DRY RUN: CI workflow changes not committed."
-            else
-              git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
-              git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
-              git add .github/workflows/
-              git commit -m "ci: Update workflow defaults for ${BRANCH_NAME}"
-              echo "Pushing CI workflow updates to main branch..."
-              git push origin main
-            fi
-          else
-            echo "No updates needed in CI workflows."
-          fi
-          
+          commit_and_push "ci: Update workflow defaults for ${BRANCH_NAME}" ".github/workflows/" "${BRANCH_NAME}"
+
           cd .. && rm -rf "$TEMP_DIR"
           echo "Workflow finished."
