@@ -92,7 +92,7 @@ jobs:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           # GH_TOKEN: ${{ secrets.ORG_ADMIN_PAT }}
         run: |
-          set -e # Exit immediately if a command exits with a non-zero status.
+          set -ex # Exit immediately if a command exits with a non-zero status.
 
           # --- FUNCTION DEFINITIONS ---
           # A function to handle committing and pushing changes.
