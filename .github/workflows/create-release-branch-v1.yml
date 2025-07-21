@@ -81,9 +81,9 @@ jobs:
           persist-credentials: false        
 
       - name: Create Branches and Update Version
-        env:
+        #env:
           # Use the token generated from the GitHub App
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          # GH_TOKEN: ${{ steps.app-token.outputs.token }}
           # GH_TOKEN: ${{ secrets.ORG_ADMIN_PAT }}
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
