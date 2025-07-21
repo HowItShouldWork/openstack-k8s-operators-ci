@@ -51,7 +51,7 @@ jobs:
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
-          owner: ${{ github.repository_owner }}
+          #owner: ${{ github.repository_owner }}
 
       - name: Get GitHub App User ID
         id: get-user-id
@@ -152,22 +152,6 @@ jobs:
               continue
             fi
 
-            #echo ${{ steps.app-token.outputs.token }} | gh auth login --with-token
-            #gh auth setup-git
-
-            # --- TEMPORARY DEBUG STEP ---
-            echo "--- DEBUGGING PERMISSIONS for ${repo_name} ---"
-            gh api "repos/${ORG_NAME}/${repo_name}" --jq .permissions
-            echo "---------------------------------------------"
-          done
-
-          for repo_name in $repos; do
-            echo "--- Checking REPOSITORY: ${repo_name} ---"
-
-            if [[ "$repo_name" == "rabbitmq-cluster-operator" ]]; then 
-              continue
-            fi
-
             if gh api "repos/${ORG_NAME}/${repo_name}/branches/${TRIGGER_BRANCH}" >/dev/null 2>&1; then
               echo "✅ Trigger branch '${TRIGGER_BRANCH}' found in ${repo_name}."
 
@@ -176,11 +160,6 @@ jobs:
               git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/${repo_name}.git" "$TEMP_DIR"
               
               cd "$TEMP_DIR"
-
-              # --- TEMPORARY DEBUG STEP ---
-              echo "--- DEBUGGING PERMISSIONS for ${repo_name} ---"
-              gh api "repos/${ORG_NAME}/${repo_name}" --jq .permissions
-              echo "---------------------------------------------"
 
               if ! git show-ref --verify --quiet "refs/remotes/origin/${SOURCE_BRANCH}"; then
                 echo "⚠️ Source branch '${SOURCE_BRANCH}' does not exist in ${repo_name}. Skipping."
