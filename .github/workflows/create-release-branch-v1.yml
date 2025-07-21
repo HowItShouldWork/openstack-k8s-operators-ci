@@ -141,6 +141,19 @@ jobs:
               continue
             fi
 
+            # --- TEMPORARY DEBUG STEP ---
+            echo "--- DEBUGGING PERMISSIONS for ${repo_name} ---"
+            gh api "repos/${ORG_NAME}/${repo_name}" --jq .permissions
+            echo "---------------------------------------------"
+          done
+
+          for repo_name in $repos; do
+            echo "--- Checking REPOSITORY: ${repo_name} ---"
+
+            if [[ "$repo_name" == "rabbitmq-cluster-operator" ]]; then 
+              continue
+            fi
+
             if gh api "repos/${ORG_NAME}/${repo_name}/branches/${TRIGGER_BRANCH}" >/dev/null 2>&1; then
               echo "✅ Trigger branch '${TRIGGER_BRANCH}' found in ${repo_name}."
 
