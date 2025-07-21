@@ -46,7 +46,7 @@ jobs:
       SOURCE_BRANCH: 'main'    
     steps:
       - name: Generate a token from the GitHub App
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v1
         id: app-token
         with:
           app-id: ${{ secrets.APP_ID }}
