@@ -46,8 +46,8 @@ jobs:
       SOURCE_BRANCH: 'main'    
     steps:
       - name: Generate a token from the GitHub App
+        uses: actions/create-github-app-token@v2
         id: generate_token
-        uses: actions/create-github-app-token@v1
         with:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
@@ -75,6 +75,10 @@ jobs:
           
       - name: Checkout code (for the workflow itself)
         uses: actions/checkout@v4
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          # Make sure the value of GITHUB_TOKEN will not be persisted in repo's config
+          persist-credentials: false        
 
       - name: Create Branches and Update Version
         env:
