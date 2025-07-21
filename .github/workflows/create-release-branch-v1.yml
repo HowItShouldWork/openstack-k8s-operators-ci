@@ -6,15 +6,15 @@ on:
   workflow_dispatch:
     inputs:
       BRANCH_NAME:
-        description: 'The name of the new feature/release branch to create (e.g. 18.0-fr3).'
+        description: 'The name of the new feature/release branch to create, e.g. 18.0-fr3 .'
         required: true
         type: string
       NEW_VERSION:
-        description: 'The new version to set in the Makefile on the main/source branch (e.g. 0.5).'
+        description: 'The new version to set in the Makefile on the main/source branch, e.g. 0.5 .'
         required: true
         type: string
       FORCE_BUMP_BRANCHES:
-        description: 'The new list of branches for the force-bump-branches.yaml workflow (e.g., ["main", "18.0-fr3"]).'
+        description: 'The new list of branches for the force-bump-branches.yaml workflow, e.g. ["main", "18.0-fr3"] .'
         required: true
         type: string    
       DRY_RUN:
