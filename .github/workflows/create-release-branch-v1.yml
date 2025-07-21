@@ -5,11 +5,6 @@ on:
   # This workflow can be run manually from the Actions tab.
   workflow_dispatch:
     inputs:
-      DRY_RUN:
-        description: 'Run without pushing any changes. Set to false to apply changes.'
-        required: true
-        type: boolean
-        default: true
       BRANCH_NAME:
         description: 'The name of the new feature/release branch to create (e.g. 18.0-fr3).'
         required: true
@@ -21,7 +16,12 @@ on:
       FORCE_BUMP_BRANCHES:
         description: 'The new list of branches for the force-bump-branches.yaml workflow (e.g., ["main", "18.0-fr3"]).'
         required: true
-        type: string
+        type: string    
+      DRY_RUN:
+        description: 'Run without pushing any changes. Set to false to apply changes.'
+        required: true
+        type: boolean
+        default: true
 
 jobs:
   create-branches:
