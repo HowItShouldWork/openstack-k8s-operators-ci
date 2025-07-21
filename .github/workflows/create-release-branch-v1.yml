@@ -52,7 +52,6 @@ jobs:
           app-id: ${{ secrets.APP_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
           owner: ${{ github.repository_owner }}
-          #permission-issues: write
 
       - name: Get GitHub App User ID
         id: get-user-id
@@ -112,8 +111,6 @@ jobs:
               else
                 git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
                 git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
-                #git config --global user.name "github-actions[bot]"
-                #git config --global user.email "github-actions[bot]@users.noreply.github.com"
                 git add $files_to_add
                 git commit -m "$commit_message"
                 echo "Pushing changes to ${branch_to_push}..."
@@ -258,8 +255,7 @@ jobs:
       - name: Update openstack-k8s-operators-ci workflows
         env:
           # Use the token generated from the GitHub App
-          GH_TOKEN: ${{ steps.generate_token.outputs.token }}
-          # GH_TOKEN: ${{ secrets.ORG_ADMIN_PAT }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
 
@@ -312,8 +308,6 @@ jobs:
             else
               git config --global user.name '${{ steps.app-token.outputs.app-slug }}[bot]'
               git config --global user.email '${{ steps.get-user-id.outputs.user-id }}+${{ steps.app-token.outputs.app-slug }}[bot]@users.noreply.github.com'
-              #git config --global user.name "github-actions[bot]"
-              #git config --global user.email "github-actions[bot]@users.noreply.github.com"
               git add .github/workflows/
               git commit -m "ci: Update workflow defaults for ${BRANCH_NAME}"
               echo "Pushing CI workflow updates to main branch..."
