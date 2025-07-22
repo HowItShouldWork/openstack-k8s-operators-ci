@@ -1,0 +1,50 @@
+# .github/workflows/rabbitmq-cluster-operator-index-feature-tag.yaml
+
+name: Tag RabbitMQ Index Image for Feature Release
+
+# This workflow is triggered manually from the GitHub Actions UI
+on:
+  workflow_dispatch:
+    inputs:
+      new_tag:
+        description: "The new feature release tag to apply (e.g., 18.0-fr4)"
+        required: true
+        type: string
+
+env:
+  # The full name of the image to retag
+  IMAGE_NAME: quay.io/mschuppe/rabbitmq-cluster-operator-index
+
+jobs:
+  retag-and-push:
+    name: Retag and Push Image
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Log in to Quay.io
+        uses: redhat-actions/podman-login@v1
+        with:
+          registry: quay.io
+          username: ${{ secrets.QUAY_USERNAME }}
+          password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Pull, Tag, and Push New Tag
+        run: |
+          # Exit immediately if a command fails
+          set -euo pipefail
+
+          # Define source and target image names using environment variables and user input
+          SOURCE_IMAGE="${{ env.IMAGE_NAME }}:latest"
+          TARGET_IMAGE="${{ env.IMAGE_NAME }}:${{ github.event.inputs.new_tag }}"
+
+          echo "--> Pulling 'latest' image: ${SOURCE_IMAGE}"
+          podman pull "${SOURCE_IMAGE}"
+
+          echo "--> Applying new tag: ${{ github.event.inputs.new_tag }}"
+          podman tag "${SOURCE_IMAGE}" "${TARGET_IMAGE}"
+
+          echo "--> Pushing new tag to registry: ${TARGET_IMAGE}"
+          podman push "${TARGET_IMAGE}"
+
+          echo ""
+          echo "✅ Successfully tagged and pushed ${TARGET_IMAGE}"
