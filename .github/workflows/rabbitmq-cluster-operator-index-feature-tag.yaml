@@ -32,6 +32,15 @@ env:
   image: 'rabbitmq-cluster-operator-index'
 
 jobs:
+  check-inputs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify new_tag is not empty
+        if: "${{ github.event.inputs.new_tag == '' }}"
+        run: |
+          echo "::error title=Input Error::The 'new_tag' input cannot be empty."
+          exit 1
+
   check-secrets:
     runs-on: ubuntu-latest
     steps:
@@ -40,16 +49,12 @@ jobs:
         if: "${{ env.imagenamespace == '' }}"
         run: |
           echo "::error title=Missing required secrets::Check IMAGENAMESPACE, QUAY_USERNAME and QUAY_PASSWORD exist!"
-          echo "missing=true" >> $GITHUB_OUTPUT
-    outputs:
-      missing-secrets: ${{ steps.check.outputs.missing }}
+          exit 1
 
   retag-and-push:
     needs: check-secrets
     name: Retag and Push Image
     runs-on: ubuntu-latest
-    if: needs.check-secrets.outputs.missing-secrets != 'true'
-
     steps:
       - name: Log in to Quay.io
         uses: redhat-actions/podman-login@v1
