@@ -288,7 +288,7 @@ jobs:
             FULL_MAKEFILE_VERSION="${NEW_VERSION}.0"
             if grep -qE "^${VERSION_VARIABLE}\s*(:=|\?=|=)" Makefile; then
               sed -i -E "s/^(${VERSION_VARIABLE}\s*(:=|\?=|=)).*/\1 ${FULL_MAKEFILE_VERSION}/" Makefile
-              commit_and_push "Bump version to ${FULL_MAKEFILE_VERSION}" "Makefile" "${SOURCE_BRANCH}"
+              commit_and_push "Bump Makefile version to ${FULL_MAKEFILE_VERSION}" "Makefile" "${SOURCE_BRANCH}"
             else
               echo "Variable '${VERSION_VARIABLE}' not found. No changes pushed to ${SOURCE_BRANCH}."
             fi
@@ -300,7 +300,7 @@ jobs:
           if [ -f "hack/fake_minor_update.sh" ]; then
             if grep -qE "^${VERSION_VARIABLE}=" hack/fake_minor_update.sh; then
               sed -i -E "s/^(${VERSION_VARIABLE}=).*/\1${NEW_VERSION}/" hack/fake_minor_update.sh
-              commit_and_push "Bump version to ${NEW_VERSION}" "hack/fake_minor_update.sh" "${SOURCE_BRANCH}"
+              commit_and_push "Bump fake_minor_update.sh version to ${NEW_VERSION}" "hack/fake_minor_update.sh" "${SOURCE_BRANCH}"
             else
               echo "Variable '${VERSION_VARIABLE}' not found. No changes pushed to ${SOURCE_BRANCH}."
             fi
