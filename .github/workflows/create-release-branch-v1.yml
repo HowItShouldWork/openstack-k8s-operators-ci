@@ -283,7 +283,7 @@ jobs:
           git checkout main
           git pull origin main
 
-          # changes to the Makefile
+          # change to the Makefile
           if [ -f "Makefile" ]; then
             FULL_MAKEFILE_VERSION="${NEW_VERSION}.0"
             if grep -qE "^${VERSION_VARIABLE}\s*(:=|\?=|=)" Makefile; then
@@ -294,6 +294,18 @@ jobs:
             fi
           else
             echo "No Makefile found. No changes pushed to ${SOURCE_BRANCH}."
+          fi
+
+          # change to hack/fake_minor_update.sh
+          if [ -f "hack/fake_minor_update.sh" ]; then
+            if grep -qE "^${VERSION_VARIABLE}=" hack/fake_minor_update.sh; then
+              sed -i -E "s/^(${VERSION_VARIABLE}=).*/\1${NEW_VERSION}/" hack/fake_minor_update.sh
+              commit_and_push "Bump version to ${NEW_VERSION}" "hack/fake_minor_update.sh" "${SOURCE_BRANCH}"
+            else
+              echo "Variable '${VERSION_VARIABLE}' not found. No changes pushed to ${SOURCE_BRANCH}."
+            fi
+          else
+            echo "No hack/fake_minor_update.sh found. No changes pushed to ${SOURCE_BRANCH}."
           fi
 
           # changes to .github/workflows/catalog-openstack-operator-upgrades.yaml
