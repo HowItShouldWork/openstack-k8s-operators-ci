@@ -387,7 +387,7 @@ jobs:
     uses: ./.github/workflows/rabbitmq-cluster-operator-index-feature-tag.yaml
     with:
       # Use the output from the 'log-the-tag' job
-      new_tag: ${{ needs.log-the-tag.outputs.tag_to_use }}
+      new_tag: ${{ needs.log-the-tag.outputs.new_tag }}
     secrets:
       # Pass secrets as before
       IMAGENAMESPACE: ${{ secrets.IMAGENAMESPACE }}
