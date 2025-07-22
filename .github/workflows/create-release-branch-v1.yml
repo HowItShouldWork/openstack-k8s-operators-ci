@@ -74,23 +74,18 @@ jobs:
             echo "Please provide it in the format [\"item1\", \"item2\"]."
             exit 1
           fi
-          
+ 
           if [[ -z "$BRANCH_NAME" ]] || [[ -z "$NEW_VERSION" ]]; then
             echo "Error: Required inputs BRANCH_NAME or NEW_VERSION were not provided."
             exit 1
           fi
-          echo "Inputs are valid."          
-          
+          echo "Inputs are valid."
+ 
       - name: Checkout code (for the workflow itself)
         uses: actions/checkout@v4
         with:
           token: ${{ steps.app-token.outputs.token }}
-          # Make sure the value of GITHUB_TOKEN will not be persisted in repo's config
-          #persist-credentials: false        
 
-      # ----------------------------------------------------------------
-      # Step 1: Create the function library file
-      # ----------------------------------------------------------------
       - name: Create Function Library
         run: |
           set -e
@@ -173,11 +168,11 @@ jobs:
         run: |
           set -ex # Exit immediately if a command exits with a non-zero status.
           source ./workflow_functions.sh
-          
+ 
           if [ "$DRY_RUN" = "true" ]; then
             echo "!!! --- Running in DRY RUN mode. No changes will be pushed. --- !!!"
           fi
-          
+ 
           echo "Running with the following configuration:"
           echo "Organization: ${ORG_NAME}"
           echo "Feature Branch Name: ${BRANCH_NAME}"
@@ -186,7 +181,7 @@ jobs:
           echo "Trigger Branch: ${TRIGGER_BRANCH}"
           echo "Source Branch: ${SOURCE_BRANCH}"
           echo "-------------------------------------------"
-          
+ 
           echo "Searching for repositories in organization '${ORG_NAME}'..."
           repos=$(gh repo list $ORG_NAME --limit 1000 --json name --jq '.[] | .name')
 
@@ -210,7 +205,7 @@ jobs:
               TEMP_DIR=$(mktemp -d)
               echo "Cloning repository into ${TEMP_DIR}..."
               git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/${repo_name}.git" "$TEMP_DIR"
-              
+ 
               cd "$TEMP_DIR"
 
               if ! git show-ref --verify --quiet "refs/remotes/origin/${SOURCE_BRANCH}"; then
@@ -224,7 +219,7 @@ jobs:
                 cd .. && rm -rf "$TEMP_DIR"
                 continue
               fi
-              
+ 
               echo "Creating branch '${BRANCH_NAME}' from '${SOURCE_BRANCH}'..."
               git checkout ${SOURCE_BRANCH}
               git checkout -b ${BRANCH_NAME}
@@ -272,7 +267,7 @@ jobs:
         run: |
           set -ex # Exit immediately if a command exits with a non-zero status.
           source ./workflow_functions.sh
-          
+ 
           echo "--- Checking REPOSITORY: openstack-k8s-operators-ci ---"
           TEMP_DIR=$(mktemp -d)
           echo "Cloning repository into ${TEMP_DIR}..."
@@ -313,7 +308,7 @@ jobs:
           if [ -f "${WORKFLOW_FILE}" ]; then
             # 1. Find the index of the step to update
             index=$(yq '.jobs.build-catalog.steps | to_entries | .[] | select(.value.name == "Create the catalog index") | .key' ${WORKFLOW_FILE})
-            
+ 
             # 2. Check if an index was found
             if [ -z "$index" ]; then
               echo "Step 'Create the catalog index' not found."
@@ -330,9 +325,9 @@ jobs:
             commit_and_push "Bump version in ${WORKFLOW_FILE} to ${FULL_NEW_VERSION}" "${WORKFLOW_FILE}" "${SOURCE_BRANCH}"
           else
             echo "No ${WORKFLOW_FILE} found. No changes pushed to ${SOURCE_BRANCH}."
-          fi            
+          fi
 
-          cd .. && rm -rf "$TEMP_DIR"          
+          cd .. && rm -rf "$TEMP_DIR"
 
       - name: Update openstack-k8s-operators-ci workflows
         env:
@@ -371,4 +366,4 @@ jobs:
       # Pass secrets as before
       IMAGENAMESPACE: ${{ secrets.IMAGENAMESPACE }}
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
-      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}      
+      QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
