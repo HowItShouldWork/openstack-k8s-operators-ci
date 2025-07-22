@@ -62,7 +62,7 @@ jobs:
         id: check-tag
         run: |
           # Exit immediately if a command fails
-          set -euo pipefail
+          set -exuo pipefail
           SOURCE_IMAGE="${{ env.imageregistry }}/${{ env.imagenamespace }}/${{ env.image }}:latest"
           echo "Checking for existence of ${SOURCE_IMAGE}..."
 
