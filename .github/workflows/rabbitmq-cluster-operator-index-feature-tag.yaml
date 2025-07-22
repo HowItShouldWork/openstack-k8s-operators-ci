@@ -36,10 +36,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Log received new_tag input
-        run: echo "Received new_tag input '${{ github.event.inputs.new_tag }}'"
+        run: echo "Received new_tag input '${{ inputs.new_tag }}'"
 
       - name: Verify new_tag is not empty
-        if: "${{ github.event.inputs.new_tag == '' }}"
+        if: "${{ inputs.new_tag == '' }}"
         run: |
           echo "::error title=Input Error::The 'new_tag' input cannot be empty."
           exit 1    
@@ -95,7 +95,7 @@ jobs:
           echo "--> Pulling 'latest' image: ${SOURCE_IMAGE}"
           podman pull "${SOURCE_IMAGE}"
 
-          echo "--> Applying new tag: ${{ github.event.inputs.new_tag }}"
+          echo "--> Applying new tag: ${{ inputs.new_tag }}"
           podman tag "${SOURCE_IMAGE}" "${TARGET_IMAGE}"
 
           echo "--> Pushing new tag to registry: ${TARGET_IMAGE}"
