@@ -90,7 +90,7 @@ jobs:
 
           IMAGE="${{ env.imageregistry }}/${{ env.imagenamespace }}/${{ env.image }}"
           SOURCE_IMAGE="${IMAGE}:latest"
-          TARGET_IMAGE="${IMAGE}:${{ github.event.inputs.new_tag }}"
+          TARGET_IMAGE="${IMAGE}:${{ inputs.new_tag }}"
 
           echo "--> Pulling 'latest' image: ${SOURCE_IMAGE}"
           podman pull "${SOURCE_IMAGE}"
