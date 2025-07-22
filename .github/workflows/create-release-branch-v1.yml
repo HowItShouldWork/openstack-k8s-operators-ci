@@ -22,46 +22,28 @@ on:
         required: true
         type: boolean
         default: true
-env:
-  # Use current org as the ORG_NAME
-  ORG_NAME: ${{ github.repository_owner }}
-  # --- CONFIGURATION FROM INPUTS ---
-  BRANCH_NAME: ${{ inputs.BRANCH_NAME }}
-  NEW_VERSION: ${{ inputs.NEW_VERSION }}
-  FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
-  DRY_RUN: ${{ inputs.DRY_RUN }}
-  # 'The name of the version variable in the Makefile.'
-  VERSION_VARIABLE: 'VERSION'
-  # 'The name of the branch variable in the Makefile.'
-  BRANCH_VARIABLE: 'BRANCH'
-  # 'The name of the OpenStack K8s tag variable in the Makefile (for install_yamls).'
-  OPENSTACK_K8S_TAG_VARIABLE: 'OPENSTACK_K8S_TAG'
-  # 'The branch that must exist in a repo for it to be processed.'
-  TRIGGER_BRANCH: 'olive'
-  # 'The branch to create the new branch from.'
-  SOURCE_BRANCH: 'main'   
 
 jobs:
   create-branches:
     runs-on: ubuntu-latest
-#    env:
-#      # Use current org as the ORG_NAME
-#      ORG_NAME: ${{ github.repository_owner }}
-#      # --- CONFIGURATION FROM INPUTS ---
-#      BRANCH_NAME: ${{ inputs.BRANCH_NAME }}
-#      NEW_VERSION: ${{ inputs.NEW_VERSION }}
-#      FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
-#      DRY_RUN: ${{ inputs.DRY_RUN }}
-#      # 'The name of the version variable in the Makefile.'
-#      VERSION_VARIABLE: 'VERSION'
-#      # 'The name of the branch variable in the Makefile.'
-#      BRANCH_VARIABLE: 'BRANCH'
-#      # 'The name of the OpenStack K8s tag variable in the Makefile (for install_yamls).'
-#      OPENSTACK_K8S_TAG_VARIABLE: 'OPENSTACK_K8S_TAG'
-#      # 'The branch that must exist in a repo for it to be processed.'
-#      TRIGGER_BRANCH: 'olive'
-#      # 'The branch to create the new branch from.'
-#      SOURCE_BRANCH: 'main'    
+    env:
+      # Use current org as the ORG_NAME
+      ORG_NAME: ${{ github.repository_owner }}
+      # --- CONFIGURATION FROM INPUTS ---
+      BRANCH_NAME: ${{ inputs.BRANCH_NAME }}
+      NEW_VERSION: ${{ inputs.NEW_VERSION }}
+      FORCE_BUMP_BRANCHES: ${{ inputs.FORCE_BUMP_BRANCHES }}
+      DRY_RUN: ${{ inputs.DRY_RUN }}
+      # 'The name of the version variable in the Makefile.'
+      VERSION_VARIABLE: 'VERSION'
+      # 'The name of the branch variable in the Makefile.'
+      BRANCH_VARIABLE: 'BRANCH'
+      # 'The name of the OpenStack K8s tag variable in the Makefile (for install_yamls).'
+      OPENSTACK_K8S_TAG_VARIABLE: 'OPENSTACK_K8S_TAG'
+      # 'The branch that must exist in a repo for it to be processed.'
+      TRIGGER_BRANCH: 'olive'
+      # 'The branch to create the new branch from.'
+      SOURCE_BRANCH: 'main'    
     steps:
       - name: Generate a token from the GitHub App
         uses: actions/create-github-app-token@v2
@@ -384,7 +366,7 @@ jobs:
     uses: ./.github/workflows/rabbitmq-cluster-operator-index-feature-tag.yaml
     with:
       # Provide the value for the 'new_tag' input
-      new_tag: "${{ env.BRANCH_NAME }}-latest"
+      new_tag: ${{ inputs.BRANCH_NAME }}
     secrets:
       # Pass the required secrets from this workflow's environment
       # The secrets must be available in the repository running this caller workflow.
