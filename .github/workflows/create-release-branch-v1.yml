@@ -356,7 +356,7 @@ jobs:
           update_yaml_value ".github/workflows/force-bump-branches.yaml" ".jobs.trigger-jobs.strategy.matrix.branch" "${FORCE_BUMP_BRANCHES}"
 
           # Commit and push changes if any were made
-          commit_and_push "ci: Update workflow defaults for ${BRANCH_NAME}" ".github/workflows/" "${BRANCH_NAME}"
+          commit_and_push "ci: Update workflow defaults for ${BRANCH_NAME}" ".github/workflows/" "${SOURCE_BRANCH}"
 
           cd .. && rm -rf "$TEMP_DIR"
           echo "Workflow finished."
