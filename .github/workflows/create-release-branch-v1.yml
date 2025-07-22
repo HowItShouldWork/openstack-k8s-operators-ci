@@ -361,15 +361,35 @@ jobs:
           cd .. && rm -rf "$TEMP_DIR"
           echo "Workflow finished."
 
+  # 1. Add a new job specifically for logging and validation
+  log-the-tag:
+    runs-on: ubuntu-latest
+    outputs:
+      # Define an output to pass the tag to the next job
+      tag_to_use: ${{ steps.generate_tag.outputs.new_tag }}
+    steps:
+      - name: Generate and Log the Tag
+        id: generate_tag
+        run: |
+          # Construct the tag value
+          TAG_VALUE="${{ inputs.BRANCH_NAME }}-latest"
+          
+          # Log it for debugging
+          echo "Constructed new_tag value is: '${TAG_VALUE}'"
+
+          # Set the value as an output for the next job
+          echo "new_tag=${TAG_VALUE}" >> $GITHUB_OUTPUT
+
+  # 2. Update your existing job to use the output from the logging job
   retag-and-push-rabbitmq-cluster-operator-index:
-    needs: create-branches
+    # This job now depends on the new logging job
+    needs: [create-branches, log-the-tag]
     uses: ./.github/workflows/rabbitmq-cluster-operator-index-feature-tag.yaml
     with:
-      # Provide the value for the 'new_tag' input
-      new_tag: ${{ inputs.BRANCH_NAME }}
+      # Use the output from the 'log-the-tag' job
+      new_tag: ${{ needs.log-the-tag.outputs.tag_to_use }}
     secrets:
-      # Pass the required secrets from this workflow's environment
-      # The secrets must be available in the repository running this caller workflow.
+      # Pass secrets as before
       IMAGENAMESPACE: ${{ secrets.IMAGENAMESPACE }}
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}      
