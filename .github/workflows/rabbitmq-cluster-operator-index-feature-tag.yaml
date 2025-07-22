@@ -2,40 +2,76 @@
 
 name: Tag RabbitMQ Index Image for Feature Release
 
-# This workflow is triggered manually from the GitHub Actions UI
+# This workflow is triggered by another workflow
 on:
-  workflow_dispatch:
+  workflow_call:
     inputs:
       new_tag:
-        description: "The new feature release tag to apply (e.g., 18.0-fr4-latest)"
+        description: "The new feature release tag to apply (e.g., 18.0-fr4)"
         required: true
         type: string
-
+    secrets:
+      IMAGENAMESPACE:
+        required: true
+      QUAY_USERNAME:
+        required: true
+      QUAY_PASSWORD:
+        required: true
 env:
-  # The full name of the image to retag
-  IMAGE_NAME: quay.io/mschuppe/rabbitmq-cluster-operator-index
+  imageregistry: 'quay.io'
+  imagenamespace: ${{ secrets.IMAGENAMESPACE || secrets.QUAY_USERNAME }}
+  image: 'rabbitmq-cluster-operator-index'
 
 jobs:
+  check-secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check secrets are set
+        id: check
+        if: "${{ env.imagenamespace == '' }}"
+        run: |
+          echo "::error title=Missing required secrets::Check IMAGENAMESPACE, QUAY_USERNAME and QUAY_PASSWORD exist!"
+          echo "missing=true" >> $GITHUB_OUTPUT
+    outputs:
+      missing-secrets: ${{ steps.check.outputs.missing }}
+
   retag-and-push:
+    needs: check-secrets
     name: Retag and Push Image
     runs-on: ubuntu-latest
+    if: needs.check-secrets.outputs.missing-secrets != 'true'
+    env:
+      SOURCE_IMAGE: ${{ env.imageregistry }}/${{ env.imagenamespace }}/${{ env.image }}:latest
 
     steps:
       - name: Log in to Quay.io
         uses: redhat-actions/podman-login@v1
         with:
-          registry: quay.io
+          registry: ${{ env.imageregistry }}
           username: ${{ secrets.QUAY_USERNAME }}
           password: ${{ secrets.QUAY_PASSWORD }}
+
+      - name: Check if 'latest' tag exists
+        id: check-tag
+        run: |
+          # Exit immediately if a command fails
+          set -euo pipefail
+          echo "Checking for existence of ${SOURCE_IMAGE}..."
+
+          # Use podman manifest inspect. It will fail if the tag doesn't exist.
+          if ! podman manifest inspect "${SOURCE_IMAGE}" >/dev/null; then
+            echo "::error title=Tag not found::The source tag '${SOURCE_IMAGE}' does not exist. Cannot proceed."
+            exit 1
+          fi
+          echo "Source tag found. Proceeding."
 
       - name: Pull, Tag, and Push New Tag
         run: |
           # Exit immediately if a command fails
           set -euo pipefail
 
-          # Define source and target image names using environment variables and user input
-          SOURCE_IMAGE="${{ env.IMAGE_NAME }}:latest"
-          TARGET_IMAGE="${{ env.IMAGE_NAME }}:${{ github.event.inputs.new_tag }}"
+          # Construct the target image by replacing the tag on the source image
+          TARGET_IMAGE="${SOURCE_IMAGE%:latest}:${{ github.event.inputs.new_tag }}"
 
           echo "--> Pulling 'latest' image: ${SOURCE_IMAGE}"
           podman pull "${SOURCE_IMAGE}"
