@@ -370,6 +370,6 @@ jobs:
     secrets:
       # Pass the required secrets from this workflow's environment
       # The secrets must be available in the repository running this caller workflow.
-      IMAGENAMESPACE: ${{ secrets.QUAY_ORG_NAMESPACE }}
+      IMAGENAMESPACE: ${{ secrets.IMAGENAMESPACE }}
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}      
