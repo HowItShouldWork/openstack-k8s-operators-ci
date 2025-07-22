@@ -357,7 +357,7 @@ jobs:
           echo "Workflow finished."
 
   retag-and-push-rabbitmq-cluster-operator-index:
-    # This job now depends on the new logging job
+    if: inputs.DRY_RUN == false
     needs: create-branches
     uses: ./.github/workflows/rabbitmq-cluster-operator-index-feature-tag.yaml
     with:
