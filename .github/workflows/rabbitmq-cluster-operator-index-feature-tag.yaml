@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       new_tag:
-        description: "The new feature release tag to apply (e.g., 18.0-fr4)"
+        description: "The new feature release tag to apply (e.g., 18.0-fr4-latest)"
         required: true
         type: string
 
