@@ -52,7 +52,9 @@ jobs:
           exit 1
 
   retag-and-push:
-    needs: check-secrets
+    needs:
+    - check-secrets
+    - check-inputs
     name: Retag and Push Image
     runs-on: ubuntu-latest
     steps:
