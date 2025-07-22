@@ -35,11 +35,14 @@ jobs:
   check-inputs:
     runs-on: ubuntu-latest
     steps:
+      - name: Log received new_tag input
+        run: echo "Received new_tag input: '${{ github.event.inputs.new_tag }}'"
+
       - name: Verify new_tag is not empty
         if: "${{ github.event.inputs.new_tag == '' }}"
         run: |
           echo "::error title=Input Error::The 'new_tag' input cannot be empty."
-          exit 1
+          exit 1    
 
   check-secrets:
     runs-on: ubuntu-latest
