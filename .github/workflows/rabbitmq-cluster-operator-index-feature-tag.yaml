@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
     inputs:
       new_tag:
-        description: "The new feature release tag to apply (e.g., 18.0-fr4)"
+        description: "The new feature release tag to apply (e.g., 18.0-fr4-latest)"
         required: true
         type: string
 
@@ -16,7 +16,7 @@ on:
   workflow_call:
     inputs:
       new_tag:
-        description: "The new feature release tag to apply (e.g., 18.0-fr4)"
+        description: "The new feature release tag to apply (e.g., 18.0-fr4-latest)"
         required: true
         type: string
     secrets:
@@ -49,8 +49,6 @@ jobs:
     name: Retag and Push Image
     runs-on: ubuntu-latest
     if: needs.check-secrets.outputs.missing-secrets != 'true'
-    env:
-      SOURCE_IMAGE: ${{ env.imageregistry }}/${{ env.imagenamespace }}/${{ env.image }}:latest
 
     steps:
       - name: Log in to Quay.io
@@ -65,6 +63,7 @@ jobs:
         run: |
           # Exit immediately if a command fails
           set -euo pipefail
+          SOURCE_IMAGE="${{ env.imageregistry }}/${{ env.imagenamespace }}/${{ env.image }}:latest"
           echo "Checking for existence of ${SOURCE_IMAGE}..."
 
           # Use podman manifest inspect. It will fail if the tag doesn't exist.
@@ -79,8 +78,9 @@ jobs:
           # Exit immediately if a command fails
           set -euo pipefail
 
-          # Construct the target image by replacing the tag on the source image
-          TARGET_IMAGE="${SOURCE_IMAGE%:latest}:${{ github.event.inputs.new_tag }}"
+          IMAGE="${{ env.imageregistry }}/${{ env.imagenamespace }}/${{ env.image }}"
+          SOURCE_IMAGE="${IMAGE}:latest"
+          TARGET_IMAGE="${IMAGE}:${{ github.event.inputs.new_tag }}"
 
           echo "--> Pulling 'latest' image: ${SOURCE_IMAGE}"
           podman pull "${SOURCE_IMAGE}"
