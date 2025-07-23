@@ -44,6 +44,8 @@ jobs:
       TRIGGER_BRANCH: 'olive'
       # 'The branch to create the new branch from.'
       SOURCE_BRANCH: 'main'
+      # 'Timeout for git operations (in seconds)'
+      GIT_TIMEOUT: '300'
     steps:
       - name: Generate a token from the GitHub App
         uses: actions/create-github-app-token@v2
@@ -68,6 +70,8 @@ jobs:
           echo "yq version $(yq --version) installed."
 
       - name: Validate Inputs
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           set -e
           if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e 'tag == "!!seq"' >/dev/null 2>&1; then
@@ -89,7 +93,20 @@ jobs:
             exit 1
           fi
           
-          echo "Inputs are valid."
+          # Validate GitHub App has sufficient permissions
+          echo "Validating GitHub App permissions..."
+          if ! gh auth status >/dev/null 2>&1; then
+            echo "Error: GitHub App token authentication failed."
+            exit 1
+          fi
+          
+          # Test API access to organization
+          if ! gh api "orgs/${ORG_NAME}" >/dev/null 2>&1; then
+            echo "Error: Cannot access organization '${ORG_NAME}'. Check GitHub App permissions."
+            exit 1
+          fi
+          
+          echo "✅ Inputs and permissions validated successfully."
  
       - name: Checkout code (for the workflow itself)
         uses: actions/checkout@v4
@@ -125,7 +142,7 @@ jobs:
                 git add $files_to_add || return 1
                 git commit -m "$commit_message" || return 1
                 echo "Pushing changes to ${branch_to_push}..."
-                git push origin ${branch_to_push} || return 1
+                retry_command 3 5 "Pushing to ${branch_to_push}" git push origin ${branch_to_push} || return 1
               fi
             else
               echo "No changes detected in '${files_to_add}'. Nothing to commit."
@@ -196,6 +213,54 @@ jobs:
             echo "✅ Successfully processed: ${repo_name}"
             echo "${repo_name}" >> /tmp/successful_repos.txt
           }
+
+          # Retry function for transient failures
+          # Arguments: 1: max_retries, 2: delay_seconds, 3: command_description, 4+: command and args
+          retry_command() {
+            local max_retries=$1
+            local delay=$2
+            local description="$3"
+            shift 3
+            
+            local attempt=1
+            while [ $attempt -le $max_retries ]; do
+              echo "Attempt $attempt of $max_retries: $description"
+              if timeout_command "$@"; then
+                return 0
+              fi
+              
+              if [ $attempt -eq $max_retries ]; then
+                echo "❌ Failed after $max_retries attempts: $description"
+                return 1
+              fi
+              
+              echo "⚠️ Attempt $attempt failed, retrying in ${delay}s..."
+              sleep $delay
+              ((attempt++))
+            done
+          }
+
+          # Timeout wrapper for commands
+          # Arguments: 1+: command and args
+          timeout_command() {
+            timeout "${GIT_TIMEOUT}" "$@"
+          }
+
+          # Cleanup function for graceful interruption handling
+          cleanup() {
+            echo "🧹 Cleaning up temporary directories..."
+            find /tmp -name "tmp.*" -type d -user "$(whoami)" -exec rm -rf {} + 2>/dev/null || true
+            if [[ -n "${TEMP_DIR:-}" && -d "${TEMP_DIR}" ]]; then
+              echo "🧹 Removing current temp directory: ${TEMP_DIR}"
+              rm -rf "${TEMP_DIR}" 2>/dev/null || true
+            fi
+            exit 1
+          }
+
+          # Set up cleanup trap (call this in each script that needs it)
+          setup_cleanup_trap() {
+            trap cleanup INT TERM
+          }
           EOF
 
       - name: Create release branches and update the release branch
@@ -205,6 +270,9 @@ jobs:
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
           source ./workflow_functions.sh
+          
+          # Set up cleanup trap for graceful interruption handling
+          setup_cleanup_trap
  
           if [ "$DRY_RUN" = "true" ]; then
             echo "!!! --- Running in DRY RUN mode. No changes will be pushed. --- !!!"
@@ -220,12 +288,16 @@ jobs:
           echo "-------------------------------------------"
  
           echo "Searching for repositories in organization '${ORG_NAME}'..."
-          repos=$(gh repo list $ORG_NAME --limit 1000 --json name --jq '.[] | .name')
+          # Get active (non-archived, non-disabled) repositories
+          repos=$(gh repo list $ORG_NAME --limit 1000 --json name,isArchived,isDisabled --jq '.[] | select(.isArchived == false and .isDisabled == false) | .name')
 
           if [ -z "$repos" ]; then
-            echo "No repositories found in the organization or permissions are missing."
+            echo "No active repositories found in the organization or permissions are missing."
             exit 1
           fi
+          
+          total_repos=$(echo "$repos" | wc -w)
+          echo "Found ${total_repos} active repositories to process."
 
           created_repos=""
           failed_repos=""
@@ -236,12 +308,14 @@ jobs:
           touch /tmp/failed_repos.txt
           touch /tmp/skipped_repos.txt
 
+          current_repo=1
           for repo_name in $repos; do
-            echo "--- Processing REPOSITORY: ${repo_name} ---"
+            echo "--- Processing REPOSITORY: ${repo_name} (${current_repo}/${total_repos}) ---"
 
             if [[ "$repo_name" == "rabbitmq-cluster-operator" ]]; then 
               echo "ℹ️ Skipping ${repo_name} (handled separately)"
               echo "${repo_name}" >> /tmp/skipped_repos.txt
+              ((current_repo++))
               continue
             fi
 
@@ -249,6 +323,7 @@ jobs:
             if ! gh api "repos/${ORG_NAME}/${repo_name}/branches/${TRIGGER_BRANCH}" >/dev/null 2>&1; then
               echo "❌ Trigger branch '${TRIGGER_BRANCH}' not found in ${repo_name}. Skipping."
               echo "${repo_name}" >> /tmp/skipped_repos.txt
+              ((current_repo++))
               continue
             fi
 
@@ -257,9 +332,9 @@ jobs:
             TEMP_DIR=$(mktemp -d)
             echo "Cloning repository into ${TEMP_DIR}..."
             
-            # FAIL if clone fails
-            if ! git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/${repo_name}.git" "$TEMP_DIR"; then
-              handle_repo_error "${repo_name}" "Failed to clone repository" "$TEMP_DIR"
+            # FAIL if clone fails (with retry for transient network issues)
+            if ! retry_command 3 5 "Cloning ${repo_name}" git clone "https://x-access-token:${GH_TOKEN}@github.com/${ORG_NAME}/${repo_name}.git" "$TEMP_DIR"; then
+              handle_repo_error "${repo_name}" "Failed to clone repository after retries" "$TEMP_DIR"
             fi
  
             cd "$TEMP_DIR" || handle_repo_error "${repo_name}" "Failed to change to repository directory" "$TEMP_DIR"
@@ -274,17 +349,18 @@ jobs:
               echo "ℹ️ Branch '${BRANCH_NAME}' already exists in ${repo_name}. Skipping this repository."
               echo "${repo_name}" >> /tmp/skipped_repos.txt
               cd .. && rm -rf "$TEMP_DIR"
+              ((current_repo++))
               continue
             fi
  
             echo "Creating branch '${BRANCH_NAME}' from '${SOURCE_BRANCH}'..."
             
             # FAIL if checkout operations fail
-            if ! git checkout ${SOURCE_BRANCH}; then
+            if ! timeout_command git checkout ${SOURCE_BRANCH}; then
               handle_repo_error "${repo_name}" "Failed to checkout source branch '${SOURCE_BRANCH}'" "$TEMP_DIR"
             fi
             
-            if ! git checkout -b ${BRANCH_NAME}; then
+            if ! timeout_command git checkout -b ${BRANCH_NAME}; then
               handle_repo_error "${repo_name}" "Failed to create new branch '${BRANCH_NAME}'" "$TEMP_DIR"
             fi
 
@@ -311,8 +387,8 @@ jobs:
               echo "No Makefile found. Creating branch without Makefile changes."
               # Still need to push the branch even without Makefile changes
               if [ "$DRY_RUN" != "true" ]; then
-                if ! git push origin ${BRANCH_NAME}; then
-                  handle_repo_error "${repo_name}" "Failed to push new branch" "$TEMP_DIR"
+                if ! retry_command 3 5 "Pushing new branch ${BRANCH_NAME}" git push origin ${BRANCH_NAME}; then
+                  handle_repo_error "${repo_name}" "Failed to push new branch after retries" "$TEMP_DIR"
                 fi
               fi
             fi
@@ -322,6 +398,7 @@ jobs:
             created_repos+="- ${repo_name}\n"
 
             cd .. && rm -rf "$TEMP_DIR"
+            ((current_repo++))
           done
 
           echo "-------------------------------------------"
@@ -373,6 +450,9 @@ jobs:
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
           source ./workflow_functions.sh
+          
+          # Set up cleanup trap for graceful interruption handling
+          setup_cleanup_trap
  
           echo "--- Updating REPOSITORY: openstack-operator ---"
           TEMP_DIR=$(mktemp -d)
@@ -456,6 +536,9 @@ jobs:
         run: |
           set -e # Exit immediately if a command exits with a non-zero status.
           source ./workflow_functions.sh
+          
+          # Set up cleanup trap for graceful interruption handling
+          setup_cleanup_trap
 
           echo "--- Updating REPOSITORY: openstack-k8s-operators-ci ---"
           TEMP_DIR=$(mktemp -d)
