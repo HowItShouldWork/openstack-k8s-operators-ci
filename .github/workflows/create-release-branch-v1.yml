@@ -80,6 +80,15 @@ jobs:
             echo "Error: Required inputs BRANCH_NAME or NEW_VERSION were not provided."
             exit 1
           fi
+          
+          # Validate that BRANCH_NAME is included in FORCE_BUMP_BRANCHES
+          if ! echo "${FORCE_BUMP_BRANCHES}" | yq -e "contains([\"${BRANCH_NAME}\"])" >/dev/null 2>&1; then
+            echo "Error: BRANCH_NAME '${BRANCH_NAME}' must be included in FORCE_BUMP_BRANCHES list."
+            echo "Current FORCE_BUMP_BRANCHES: ${FORCE_BUMP_BRANCHES}"
+            echo "Please add '${BRANCH_NAME}' to the FORCE_BUMP_BRANCHES array."
+            exit 1
+          fi
+          
           echo "Inputs are valid."
  
       - name: Checkout code (for the workflow itself)
