@@ -255,7 +255,3 @@ jobs:
           podman rmi "${SOURCE_IMAGE}" "${TARGET_IMAGE}" 2>/dev/null || true
           echo "Cleanup completed"
 
-      - name: Log out from registry
-        if: always()
-        run: |
-          podman logout "${{ env.imageregistry }}" 2>/dev/null || true
