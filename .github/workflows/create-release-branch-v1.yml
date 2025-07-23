@@ -288,8 +288,8 @@ jobs:
           echo "-------------------------------------------"
  
           echo "Searching for repositories in organization '${ORG_NAME}'..."
-          # Get active (non-archived, non-disabled) repositories
-          repos=$(gh repo list $ORG_NAME --limit 1000 --json name,isArchived,isDisabled --jq '.[] | select(.isArchived == false and .isDisabled == false) | .name')
+          # Get active (non-archived) repositories
+          repos=$(gh repo list $ORG_NAME --limit 1000 --json name,isArchived --jq '.[] | select(.isArchived == false) | .name')
 
           if [ -z "$repos" ]; then
             echo "No active repositories found in the organization or permissions are missing."
