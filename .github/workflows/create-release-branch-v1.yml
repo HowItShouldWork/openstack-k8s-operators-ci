@@ -16,10 +16,30 @@ on:
       FORCE_BUMP_BRANCHES:
         description: 'The new list of branches for the force-bump-branches.yaml workflow, e.g. ["main", "18.0-fr3"] .'
         required: true
-        type: string    
+        type: string
       DRY_RUN:
         description: 'Test Run! Run without pushing any changes. Disable to apply changes.'
-        required: true
+        required: false
+        type: boolean
+        default: true
+      CREATE_RELEASE_BRANCHES:
+        description: 'Enable creating release branches and updating the release branch'
+        required: false
+        type: boolean
+        default: true
+      UPDATE_OPENSTACK_OPERATOR:
+        description: 'Enable updating openstack-operator main branch'
+        required: false
+        type: boolean
+        default: true
+      UPDATE_CI_WORKFLOWS:
+        description: 'Enable updating openstack-k8s-operators-ci workflows'
+        required: false
+        type: boolean
+        default: true
+      RETAG_RABBITMQ_OPERATOR:
+        description: 'Enable retag-and-push-rabbitmq-cluster-operator-index'
+        required: false
         type: boolean
         default: true
 
@@ -264,6 +284,7 @@ jobs:
           EOF
 
       - name: Create release branches and update the release branch
+        if: inputs.CREATE_RELEASE_BRANCHES
         env:
           # Use the token generated from the GitHub App
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -442,8 +463,8 @@ jobs:
           echo "-------------------------------------------"
 
       - name: Update openstack-operator main branch
-        # Only run if branch creation was successful
-        if: success()
+        # Only run if previous steps were successful and parameter is enabled
+        if: success() && inputs.UPDATE_OPENSTACK_OPERATOR
         env:
           # Use the token generated from the GitHub App
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -528,8 +549,8 @@ jobs:
           cd .. && rm -rf "$TEMP_DIR"
 
       - name: Update openstack-k8s-operators-ci workflows
-        # Only run if previous steps were successful
-        if: success()
+        # Only run if previous steps were successful and parameter is enabled
+        if: success() && inputs.UPDATE_CI_WORKFLOWS
         env:
           # Use the token generated from the GitHub App
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -572,7 +593,8 @@ jobs:
           echo "Workflow finished."
 
   retag-and-push-rabbitmq-cluster-operator-index:
-    if: inputs.DRY_RUN == false
+    # Only run if not a dry run, parameter is enabled, and create-branches job succeeded
+    if: inputs.DRY_RUN == false && inputs.RETAG_RABBITMQ_OPERATOR && needs.create-branches.result == 'success'
     needs: create-branches
     uses: ./.github/workflows/rabbitmq-cluster-operator-index-feature-tag.yaml
     with:
@@ -581,4 +603,3 @@ jobs:
       IMAGENAMESPACE: ${{ secrets.IMAGENAMESPACE }}
       QUAY_USERNAME: ${{ secrets.QUAY_USERNAME }}
       QUAY_PASSWORD: ${{ secrets.QUAY_PASSWORD }}
-
